@@ -1,0 +1,1 @@
+{% extends 'base.html' %}{% block content %}<h2>Phishing Scenarios</h2><div class="row g-3">{% for s in scenarios %}<div class="col-md-6"><div class="card card-body"><h5>{{s.subject}}</h5><p>From: {{s.sender}}</p><a class="btn btn-outline-danger" href="/phishing/{{s.id}}">Analyse</a></div></div>{% endfor %}</div>{% endblock %}

@@ -1,0 +1,196 @@
+<!-- Hidden Flask/Jinja data -->
+<div
+    id="dashboardData"
+    data-risk-low="{{ risk_counts.get('Low', 0) }}"
+    data-risk-moderate="{{ risk_counts.get('Moderate', 0) }}"
+    data-risk-high="{{ risk_counts.get('High', 0) }}"
+    data-risk-critical="{{ risk_counts.get('Critical', 0) }}"
+    data-quiz-labels='{{ quiz_chart_labels | tojson }}'
+    data-quiz-values='{{ quiz_chart_values | tojson }}'
+    style="display: none;">
+</div>
+
+
+{% block scripts %}
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+
+document.addEventListener("DOMContentLoaded", function () {
+
+    // Get data container
+    const dataElement =
+        document.getElementById("dashboardData");
+
+
+    // -----------------------------------------
+    // Risk Data
+    // -----------------------------------------
+
+    const riskLow =
+        Number(dataElement.dataset.riskLow || 0);
+
+    const riskModerate =
+        Number(dataElement.dataset.riskModerate || 0);
+
+    const riskHigh =
+        Number(dataElement.dataset.riskHigh || 0);
+
+    const riskCritical =
+        Number(dataElement.dataset.riskCritical || 0);
+
+
+    // -----------------------------------------
+    // Quiz Data
+    // -----------------------------------------
+
+    let quizLabels = [];
+
+    let quizValues = [];
+
+
+    try {
+
+        quizLabels =
+            JSON.parse(
+                dataElement.dataset.quizLabels || "[]"
+            );
+
+        quizValues =
+            JSON.parse(
+                dataElement.dataset.quizValues || "[]"
+            );
+
+    } catch (error) {
+
+        console.error(
+            "Unable to load quiz chart data:",
+            error
+        );
+
+    }
+
+
+    // -----------------------------------------
+    // Risk Distribution Chart
+    // -----------------------------------------
+
+    const riskCanvas =
+        document.getElementById("riskChart");
+
+
+    if (riskCanvas) {
+
+        new Chart(riskCanvas, {
+
+            type: "doughnut",
+
+            data: {
+
+                labels: [
+                    "Low",
+                    "Moderate",
+                    "High",
+                    "Critical"
+                ],
+
+                datasets: [{
+
+                    label: "Employees",
+
+                    data: [
+                        riskLow,
+                        riskModerate,
+                        riskHigh,
+                        riskCritical
+                    ]
+
+                }]
+
+            },
+
+            options: {
+
+                responsive: true,
+
+                maintainAspectRatio: false,
+
+                plugins: {
+
+                    legend: {
+
+                        position: "bottom"
+
+                    }
+
+                }
+
+            }
+
+        });
+
+    }
+
+
+    // -----------------------------------------
+    // Quiz Performance Chart
+    // -----------------------------------------
+
+    const quizCanvas =
+        document.getElementById("quizChart");
+
+
+    if (quizCanvas) {
+
+        new Chart(quizCanvas, {
+
+            type: "line",
+
+            data: {
+
+                labels: quizLabels,
+
+                datasets: [{
+
+                    label: "Quiz Score (%)",
+
+                    data: quizValues,
+
+                    tension: 0.3,
+
+                    fill: false
+
+                }]
+
+            },
+
+            options: {
+
+                responsive: true,
+
+                maintainAspectRatio: false,
+
+                scales: {
+
+                    y: {
+
+                        beginAtZero: true,
+
+                        max: 100
+
+                    }
+
+                }
+
+            }
+
+        });
+
+    }
+
+});
+
+</script>
+
+{% endblock %}
