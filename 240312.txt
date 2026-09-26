@@ -56,3 +56,27 @@ The navigation flow was reviewed and corrected.
 
 Next Week:
 I plan to support final integration, testing and presentation preparation.
+
+
+Week 4
+
+Planned:
+Recheck authentication functions and support final documentation and demonstration preparation.
+
+Finished:
+I retested user registration, login, logout, duplicate email handling and protected page access. I also helped verify that the setup instructions matched the working application and supported the preparation of authentication screenshots for the report and presentation.
+
+Obstacles:
+The main challenge was making sure the demonstration flow was simple and that users could move correctly between login, dashboard and logout.
+
+Solution:
+I tested the full authentication flow several times and reviewed the navigation after successful and unsuccessful login attempts.
+
+What Did Not Work:
+Some screenshots did not clearly show the complete registration and login flow, so clearer evidence was prepared.
+
+Not Finished:
+Only final presentation practice and any small corrections identified during review remained.
+
+Next Week:
+I plan to support the final demonstration and explain the authentication and access-control features during the presentation.
