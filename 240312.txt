@@ -1,0 +1,58 @@
+Week 1
+
+Planned:
+Review the CyberAware requirements and identify the authentication requirements.
+
+Finished:
+I participated in the initial project discussion and helped define secure registration and login user stories.
+
+Obstacles:
+We needed to decide what information should be required during registration and how access should be controlled.
+
+Solution:
+The team agreed on a simple account system using name, email and password with authenticated sessions.
+
+Next Week:
+I plan to work on registration, login and authentication functionality.
+
+
+Week 2
+
+Planned:
+Develop secure registration and login functions.
+
+Finished:
+I worked on user registration and login features. I helped implement password protection, user validation and session-based access.
+
+Obstacles:
+Duplicate email registration and invalid login attempts needed correct handling.
+
+Solution:
+Validation and error messages were added and tested.
+
+What Did Not Work:
+Some early authentication tests did not redirect correctly after login.
+
+Not Finished:
+Minor navigation improvements remained.
+
+Next Week:
+I plan to test authentication and protected pages.
+
+
+Week 3
+
+Planned:
+Complete authentication testing and support integration.
+
+Finished:
+I tested registration, login, logout and protected page access. I confirmed that unauthorised users could not access protected functionality.
+
+Obstacles:
+Some navigation links needed adjustment depending on whether a user was logged in.
+
+Solution:
+The navigation flow was reviewed and corrected.
+
+Next Week:
+I plan to support final integration, testing and presentation preparation.
