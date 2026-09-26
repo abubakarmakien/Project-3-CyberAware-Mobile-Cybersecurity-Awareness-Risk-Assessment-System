@@ -1,0 +1,58 @@
+Week 1
+
+Planned:
+Form the team, understand the project requirements and set up project management tools.
+
+Finished:
+I acted as Scrum Master and helped organise the team. I set up and managed the Jira and GitHub project structure. I helped define the product backlog, user stories, epics and sprint plan.
+
+Obstacles:
+The team initially had difficulty locating and configuring Jira sprint functionality.
+
+Solution:
+I reviewed the Jira project settings and organised the stories into the correct sprints and epics.
+
+Next Week:
+I plan to coordinate development and work on management dashboard functionality.
+
+
+Week 2
+
+Planned:
+Integrate the main modules and develop management analytics.
+
+Finished:
+I worked on system integration and the management dashboard. I helped implement average awareness scores, quiz performance, training completion and risk analytics.
+
+Obstacles:
+A database schema issue caused an error when the application was run.
+
+Solution:
+The local database was reset and recreated using the updated model structure, after which the application ran correctly.
+
+What Did Not Work:
+The previous database structure was not compatible with the updated application model.
+
+Not Finished:
+Some management analytics still required final testing.
+
+Next Week:
+I plan to complete dashboard analytics and coordinate full system testing.
+
+
+Week 3
+
+Planned:
+Complete integration, Jira planning and documentation evidence.
+
+Finished:
+I coordinated final testing of the main CyberAware functions. I completed Jira story organisation, sprint allocation and project planning. I also helped prepare the system architecture and management analytics evidence.
+
+Obstacles:
+The main challenge was keeping Jira, GitHub and the implemented system consistent.
+
+Solution:
+The user stories, development work and documentation were reviewed together.
+
+Next Week:
+I plan to coordinate the Week 5 presentation, retrospective and prototype preparation.
