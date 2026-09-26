@@ -1,1 +1,187 @@
-{% extends 'base.html' %}{% block content %}<h2>Employee Dashboard</h2><div class="row g-3"><div class="col-md-3"><div class="card card-body">Awareness Score<span class="display-6">{{score}}%</span></div></div><div class="col-md-3"><div class="card card-body">Quiz Average<span class="display-6">{{quiz}}%</span></div></div><div class="col-md-3"><div class="card card-body">Phishing Score<span class="display-6">{{phishing}}%</span></div></div><div class="col-md-3"><div class="card card-body">Risk Level<span class="display-6">{{risk}}</span></div></div></div><div class="row g-3 mt-1"><div class="col-lg-8"><div class="card card-body"><canvas id="chart"></canvas></div></div><div class="col-lg-4"><div class="card card-body"><h5>Training {{completion}}%</h5><h5>Recommendations</h5><ul>{% for r in recommendations %}<li>{{r}}</li>{% endfor %}</ul></div></div></div>{% endblock %}{% block scripts %}<script src="https://cdn.jsdelivr.net/npm/chart.js"></script><script>new Chart(document.getElementById('chart'),{type:'line',data:{labels:{{labels|tojson}},datasets:[{label:'Quiz Score',data:{{values|tojson}}}]},options:{scales:{y:{beginAtZero:true,max:100}}}});</script>{% endblock %}
+{% extends "base.html" %}
+
+{% block title %}
+Employee Dashboard | CyberAware
+{% endblock %}
+
+{% block content %}
+
+<div class="container py-4">
+
+    <h2 class="mb-4">Employee Dashboard</h2>
+
+    <div class="row g-3 mb-4">
+
+        <div class="col-md-3">
+            <div class="card card-body">
+                <h6>Awareness Score</h6>
+                <h2>{{ score }}%</h2>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card card-body">
+                <h6>Quiz Average</h6>
+                <h2>{{ quiz_avg }}%</h2>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card card-body">
+                <h6>Phishing Score</h6>
+                <h2>{{ phishing_score }}%</h2>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card card-body">
+                <h6>Risk Level</h6>
+                <h2>{{ risk }}</h2>
+            </div>
+        </div>
+
+    </div>
+
+
+    <div class="row g-3">
+
+        <div class="col-md-6">
+
+            <div class="card card-body">
+                <div class="col-12 mb-3">
+    <div class="card card-body">
+        <h5>Quiz Score Trend</h5>
+
+        <div style="height: 320px;">
+            <canvas id="scoreChart"></canvas>
+        </div>
+    </div>
+</div
+                <h5>Training Completion</h5>
+
+                <h2>{{ completion }}%</h2>
+
+            </div>
+
+        </div>
+
+
+        <div class="col-md-6">
+
+            <div class="card card-body">
+
+                <h5>Recommendations</h5>
+
+                <ul>
+
+                    {% for recommendation in recommendations %}
+
+                    <li>
+                        {{ recommendation }}
+                    </li>
+
+                    {% else %}
+
+                    <li>
+                        No recommendations available.
+                    </li>
+
+                    {% endfor %}
+
+                </ul>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}
+{% block scripts %}
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script id="chart-labels" type="application/json">
+{{ labels | tojson }}
+</script>
+
+<script id="chart-values" type="application/json">
+{{ values | tojson }}
+</script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+
+    const labelsElement =
+        document.getElementById("chart-labels");
+
+    const valuesElement =
+        document.getElementById("chart-values");
+
+    const chartCanvas =
+        document.getElementById("scoreChart");
+
+    if (
+        !labelsElement ||
+        !valuesElement ||
+        !chartCanvas
+    ) {
+        return;
+    }
+
+    const chartLabels =
+        JSON.parse(labelsElement.textContent);
+
+    const chartValues =
+        JSON.parse(valuesElement.textContent);
+
+    new Chart(chartCanvas, {
+
+        type: "line",
+
+        data: {
+            labels: chartLabels,
+
+            datasets: [{
+                label: "Quiz Score (%)",
+                data: chartValues,
+                tension: 0.25,
+                fill: false
+            }]
+        },
+
+        options: {
+
+            responsive: true,
+            maintainAspectRatio: false,
+
+            scales: {
+
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    title: {
+                        display: true,
+                        text: "Score (%)"
+                    }
+                },
+
+                x: {
+                    title: {
+                        display: true,
+                        text: "Quiz Attempt"
+                    }
+                }
+
+            }
+
+        }
+
+    });
+
+});
+</script>
+
+{% endblock %}
