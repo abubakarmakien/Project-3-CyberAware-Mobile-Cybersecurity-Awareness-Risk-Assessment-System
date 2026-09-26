@@ -1,0 +1,61 @@
+Week 1
+
+Planned:
+Understand the CyberAware project requirements and discuss the system features with the team.
+
+Finished:
+I helped review the CyberAware project requirements and discussed the training and phishing awareness features with the team. I also helped plan how employees would interact with the awareness modules.
+
+Obstacles:
+At first, it was difficult to decide how the training and phishing features should connect with the rest of the system.
+
+Solution:
+We discussed the user flow as a team and divided the functionality into separate user stories.
+
+Not Finished:
+No major unfinished work remained from this week.
+
+Next Week:
+I plan to work on cybersecurity training modules, phishing scenarios and related user interface pages.
+
+
+Week 2
+
+Planned:
+Develop the training module interface and phishing scenario functionality.
+
+Finished:
+I worked on the cybersecurity training module pages and phishing scenario assessment. I helped make the interface simple and easy to use.
+
+Obstacles:
+Some page layouts were not consistent across different screens.
+
+Solution:
+I adjusted the HTML and CSS structure and checked the pages in the browser.
+
+What Did Not Work:
+Some early layout changes did not display correctly and had to be revised.
+
+Not Finished:
+Minor interface improvements remained.
+
+Next Week:
+I plan to test training and phishing features and improve the interface where required.
+
+
+Week 3
+
+Planned:
+Complete testing and support project documentation.
+
+Finished:
+I tested the training modules and phishing scenarios and confirmed that the main functions worked correctly. I also supported the preparation of system interface flow documentation.
+
+Obstacles:
+The main challenge was ensuring that the phishing results were clearly shown to the user.
+
+Solution:
+The result and explanation flow was reviewed and tested.
+
+Next Week:
+I plan to help with prototype testing, interface improvements and presentation preparation.
