@@ -56,3 +56,27 @@ The data relationships and query logic were checked and corrected.
 
 Next Week:
 I plan to support dashboard integration and prototype testing.
+
+
+Week 4
+
+Planned:
+Finalise quiz analytics, verify awareness scoring and support final project evidence.
+
+Finished:
+I rechecked the quiz scoring, awareness score, employee progress tracking and frequently incorrect question analytics. I also supported the preparation of screenshots and presentation evidence for the final report.
+
+Obstacles:
+Some results needed to be checked carefully so that the quiz score, awareness score and progress information matched the stored attempts.
+
+Solution:
+I tested the assessment flow with different quiz attempts and reviewed the stored result records and dashboard output.
+
+What Did Not Work:
+A few early test results were not clear enough for presentation evidence and had to be repeated with cleaner test data.
+
+Not Finished:
+No major development task remained, but final presentation practice was still required.
+
+Next Week:
+I plan to support the class presentation, answer technical questions about quiz and scoring logic, and help with final project review.
