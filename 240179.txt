@@ -56,3 +56,27 @@ The user stories, development work and documentation were reviewed together.
 
 Next Week:
 I plan to coordinate the Week 5 presentation, retrospective and prototype preparation.
+
+
+Week 4
+
+Planned:
+Coordinate final integration, complete Jira and GitHub evidence, and prepare the final report and presentation.
+
+Finished:
+I reviewed the completed Jira sprints, story assignments and project objectives. I coordinated the GitHub evidence and work diaries, checked the integrated CyberAware application, and helped prepare the Assessment 2 final report and presentation. I also reviewed management dashboard and risk analytics evidence.
+
+Obstacles:
+The main challenge was keeping the implemented system, Jira stories, GitHub contributions, screenshots and report content consistent with each other.
+
+Solution:
+I compared the project evidence across Jira, GitHub and the working application and corrected missing or unclear items before final documentation.
+
+What Did Not Work:
+Some report figures and dashboard screenshots were initially labelled incorrectly and required revision.
+
+Not Finished:
+Final presentation practice, peer assessment and sponsor demonstration preparation remained.
+
+Next Week:
+I plan to coordinate the final class presentation, retrospective, peer assessment and sponsor demonstration.
