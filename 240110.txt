@@ -1,0 +1,52 @@
+Week 1
+
+Planned:
+Understand the CyberAware project scope and help organise project documentation.
+
+Finished:
+I reviewed the main CyberAware requirements with the team and discussed the planned system features and technologies.
+
+Obstacles:
+The project contained many different functions, so it was important to organise the documentation clearly.
+
+Solution:
+The team divided the project into user stories, sprints and system components.
+
+Next Week:
+I plan to support project documentation and testing.
+
+
+Week 2
+
+Planned:
+Improve project documentation and review the application interface.
+
+Finished:
+I worked on the project README and documented the main features, technologies and setup steps. I also reviewed the application interface and identified areas that could be improved.
+
+Obstacles:
+The setup instructions needed to be clear enough for another user to run the system.
+
+Solution:
+The installation and run steps were checked against the working application.
+
+Next Week:
+I plan to prepare testing documentation and system design evidence.
+
+
+Week 3
+
+Planned:
+Prepare testing evidence and system design documentation.
+
+Finished:
+I documented functional testing for registration, login, training, quiz, phishing scenarios and dashboards. I also helped organise the system architecture and interface flow diagrams for GitHub documentation.
+
+Obstacles:
+It was difficult to keep screenshots and diagrams organised.
+
+Solution:
+The files were organised into documentation folders with clear names.
+
+Next Week:
+I plan to support prototype documentation, final testing and presentation preparation.
