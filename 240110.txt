@@ -50,3 +50,27 @@ The files were organised into documentation folders with clear names.
 
 Next Week:
 I plan to support prototype documentation, final testing and presentation preparation.
+
+
+Week 4
+
+Planned:
+Update project documentation, organise final evidence and support the Assessment 2 report and presentation.
+
+Finished:
+I helped organise Jira screenshots, system architecture diagrams, interface flow diagrams and other project evidence. I reviewed the README and setup instructions and supported the formatting of the final report and presentation slides.
+
+Obstacles:
+There were many screenshots and diagrams, so it was important to keep figure names, captions and file locations consistent.
+
+Solution:
+I organised the evidence into clear categories and checked that the main figures matched the relevant report sections and presentation slides.
+
+What Did Not Work:
+Some early figure numbering and captions did not match the screenshots and needed correction.
+
+Not Finished:
+Final proofreading and presentation practice still remained.
+
+Next Week:
+I plan to help check the final report, presentation slides and supporting evidence before submission and demonstration.
