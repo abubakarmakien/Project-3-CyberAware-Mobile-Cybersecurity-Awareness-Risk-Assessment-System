@@ -17,14 +17,14 @@ import os
 
 
 # =========================================================
-# APPLICATION CONFIGURATION
+# APP CONFIGURATION
 # =========================================================
 
 app = Flask(__name__)
 
 app.config["SECRET_KEY"] = os.environ.get(
     "SECRET_KEY",
-    "change-this-secret-key"
+    "cyberaware-development-secret-key"
 )
 
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
@@ -42,7 +42,10 @@ db = SQLAlchemy(app)
 # =========================================================
 
 class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(
+        db.Integer,
+        primary_key=True
+    )
 
     name = db.Column(
         db.String(100),
@@ -62,7 +65,8 @@ class User(db.Model):
 
     role = db.Column(
         db.String(20),
-        default="employee"
+        default="employee",
+        nullable=False
     )
 
     created_at = db.Column(
@@ -90,6 +94,34 @@ class TrainingModule(db.Model):
     content = db.Column(
         db.Text,
         nullable=False
+    )
+
+
+class ModuleProgress(db.Model):
+    id = db.Column(
+        db.Integer,
+        primary_key=True
+    )
+
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("user.id"),
+        nullable=False
+    )
+
+    module_id = db.Column(
+        db.Integer,
+        db.ForeignKey("training_module.id"),
+        nullable=False
+    )
+
+    completed = db.Column(
+        db.Boolean,
+        default=False
+    )
+
+    completed_at = db.Column(
+        db.DateTime
     )
 
 
@@ -181,6 +213,35 @@ class TopicScore(db.Model):
     )
 
 
+class QuizAnswer(db.Model):
+    id = db.Column(
+        db.Integer,
+        primary_key=True
+    )
+
+    attempt_id = db.Column(
+        db.Integer,
+        db.ForeignKey("quiz_attempt.id"),
+        nullable=False
+    )
+
+    question_id = db.Column(
+        db.Integer,
+        db.ForeignKey("question.id"),
+        nullable=False
+    )
+
+    selected_answer = db.Column(
+        db.String(1),
+        nullable=False
+    )
+
+    correct = db.Column(
+        db.Boolean,
+        nullable=False
+    )
+
+
 class PhishingScenario(db.Model):
     id = db.Column(
         db.Integer,
@@ -242,39 +303,12 @@ class PhishingAttempt(db.Model):
     )
 
 
-class ModuleProgress(db.Model):
-    id = db.Column(
-        db.Integer,
-        primary_key=True
-    )
-
-    user_id = db.Column(
-        db.Integer,
-        db.ForeignKey("user.id"),
-        nullable=False
-    )
-
-    module_id = db.Column(
-        db.Integer,
-        db.ForeignKey("training_module.id"),
-        nullable=False
-    )
-
-    completed = db.Column(
-        db.Boolean,
-        default=False
-    )
-
-    completed_at = db.Column(
-        db.DateTime
-    )
-
-
 # =========================================================
-# LOGIN / ROLE DECORATORS
+# AUTH HELPERS
 # =========================================================
 
 def login_required(view):
+
     @wraps(view)
     def wrapped(*args, **kwargs):
 
@@ -295,13 +329,22 @@ def login_required(view):
 
 
 def admin_required(view):
+
     @wraps(view)
     def wrapped(*args, **kwargs):
 
-        if (
-            "user_id" not in session
-            or session.get("role") != "admin"
-        ):
+        if "user_id" not in session:
+
+            flash(
+                "Please log in first.",
+                "warning"
+            )
+
+            return redirect(
+                url_for("login")
+            )
+
+        if session.get("role") != "admin":
 
             flash(
                 "Administrator access required.",
@@ -323,7 +366,7 @@ def admin_required(view):
 
 def awareness_score(user_id):
 
-    quizzes = QuizAttempt.query.filter_by(
+    quiz_attempts = QuizAttempt.query.filter_by(
         user_id=user_id
     ).all()
 
@@ -331,43 +374,40 @@ def awareness_score(user_id):
         user_id=user_id
     ).all()
 
-    progress = ModuleProgress.query.filter_by(
-        user_id=user_id
-    ).all()
+    completed_modules = ModuleProgress.query.filter_by(
+        user_id=user_id,
+        completed=True
+    ).count()
 
     total_modules = TrainingModule.query.count()
 
 
-    # ------------------------------
     # Quiz Average
-    # ------------------------------
 
-    if quizzes:
+    if quiz_attempts:
 
-        quiz_average = (
-            sum(q.score for q in quizzes)
-            / len(quizzes)
-        )
+        quiz_average = sum(
+            attempt.score
+            for attempt in quiz_attempts
+        ) / len(quiz_attempts)
 
     else:
 
         quiz_average = 0
 
 
-    # ------------------------------
     # Phishing Score
-    # ------------------------------
 
     if phishing_attempts:
 
-        correct_phishing = sum(
+        phishing_correct = sum(
             1
-            for p in phishing_attempts
-            if p.correct
+            for attempt in phishing_attempts
+            if attempt.correct
         )
 
         phishing_score = (
-            correct_phishing
+            phishing_correct
             / len(phishing_attempts)
         ) * 100
 
@@ -376,40 +416,29 @@ def awareness_score(user_id):
         phishing_score = 0
 
 
-    # ------------------------------
     # Training Completion
-    # ------------------------------
 
-    completed_modules = sum(
-        1
-        for p in progress
-        if p.completed
-    )
+    if total_modules > 0:
 
-    if total_modules:
-
-        completion_percentage = (
+        completion = (
             completed_modules
             / total_modules
         ) * 100
 
     else:
 
-        completion_percentage = 0
+        completion = 0
 
 
-    # ------------------------------
-    # Final Awareness Score
-    # ------------------------------
-
-    # 50% Quiz
-    # 30% Phishing
-    # 20% Training Completion
+    # Weighted Awareness Score
+    # 50% quiz
+    # 30% phishing
+    # 20% training completion
 
     final_score = (
         0.50 * quiz_average
         + 0.30 * phishing_score
-        + 0.20 * completion_percentage
+        + 0.20 * completion
     )
 
 
@@ -417,7 +446,7 @@ def awareness_score(user_id):
         round(final_score, 1),
         round(quiz_average, 1),
         round(phishing_score, 1),
-        round(completion_percentage, 1)
+        round(completion, 1)
     )
 
 
@@ -441,7 +470,7 @@ def risk_level(score):
 
 
 # =========================================================
-# PERSONAL RECOMMENDATIONS
+# RECOMMENDATIONS
 # =========================================================
 
 def recommendations_for_user(user_id):
@@ -455,8 +484,6 @@ def recommendations_for_user(user_id):
     ).first()
 
 
-    # Topic-specific recommendations
-
     if latest_attempt:
 
         topic_scores = TopicScore.query.filter_by(
@@ -469,19 +496,22 @@ def recommendations_for_user(user_id):
 
                 recommendations.append(
                     f"Review the {topic_score.topic} "
-                    f"training module and retake related questions."
+                    f"training module and practise related questions."
                 )
 
     else:
 
         recommendations.append(
-            "Review the training modules and retake the quiz."
+            "Complete the cybersecurity quiz."
         )
 
 
-    score, quiz_avg, phishing_score, completion = awareness_score(
-        user_id
-    )
+    (
+        score,
+        quiz_average,
+        phishing_score,
+        completion
+    ) = awareness_score(user_id)
 
 
     if phishing_score < 60:
@@ -501,8 +531,8 @@ def recommendations_for_user(user_id):
     if not recommendations:
 
         recommendations.append(
-            "Good progress. Continue practising cybersecurity "
-            "scenarios and review modules regularly."
+            "Good progress. Continue practising "
+            "cybersecurity awareness activities."
         )
 
 
@@ -510,7 +540,7 @@ def recommendations_for_user(user_id):
 
 
 # =========================================================
-# HOME PAGE
+# HOME
 # =========================================================
 
 @app.route("/")
@@ -533,20 +563,45 @@ def register():
 
     if request.method == "POST":
 
-        name = request.form[
-            "name"
-        ].strip()
+        name = request.form.get(
+            "name",
+            ""
+        ).strip()
 
-        email = request.form[
-            "email"
-        ].strip().lower()
+        email = request.form.get(
+            "email",
+            ""
+        ).strip().lower()
 
-        password = request.form[
-            "password"
-        ]
+        password = request.form.get(
+            "password",
+            ""
+        )
 
 
-        # Minimum password length
+        if not name:
+
+            flash(
+                "Name is required.",
+                "danger"
+            )
+
+            return redirect(
+                url_for("register")
+            )
+
+
+        if not email:
+
+            flash(
+                "Email is required.",
+                "danger"
+            )
+
+            return redirect(
+                url_for("register")
+            )
+
 
         if len(password) < 8:
 
@@ -560,11 +615,10 @@ def register():
             )
 
 
-        # Check existing email
-
         existing_user = User.query.filter_by(
             email=email
         ).first()
+
 
         if existing_user:
 
@@ -578,22 +632,19 @@ def register():
             )
 
 
-        # Create user
-
-        user = User(
-
+        new_user = User(
             name=name,
-
             email=email,
-
-            password_hash=
-            generate_password_hash(password),
-
+            password_hash=generate_password_hash(
+                password
+            ),
             role="employee"
         )
 
 
-        db.session.add(user)
+        db.session.add(
+            new_user
+        )
 
         db.session.commit()
 
@@ -626,13 +677,15 @@ def login():
 
     if request.method == "POST":
 
-        email = request.form[
-            "email"
-        ].strip().lower()
+        email = request.form.get(
+            "email",
+            ""
+        ).strip().lower()
 
-        password = request.form[
-            "password"
-        ]
+        password = request.form.get(
+            "password",
+            ""
+        )
 
 
         user = User.query.filter_by(
@@ -690,10 +743,17 @@ def logout():
 @login_required
 def dashboard():
 
-    user_id = session["user_id"]
+    user_id = session[
+        "user_id"
+    ]
 
 
-    score, quiz_avg, phishing_score, completion = awareness_score(
+    (
+        score,
+        quiz_average,
+        phishing_score,
+        completion
+    ) = awareness_score(
         user_id
     )
 
@@ -705,45 +765,47 @@ def dashboard():
     ).all()
 
 
-    labels = []
-
-    values = []
-
-
-    for index, attempt in enumerate(
-        attempts,
-        start=1
-    ):
-
-        labels.append(
-            f"Attempt {index}"
+    labels = [
+        f"Attempt {index}"
+        for index in range(
+            1,
+            len(attempts) + 1
         )
+    ]
 
-        values.append(
-            attempt.score
-        )
+
+    values = [
+        attempt.score
+        for attempt in attempts
+    ]
 
 
     return render_template(
-
         "dashboard.html",
 
         score=score,
 
-        quiz_avg=quiz_avg,
+        quiz_avg=quiz_average,
 
-        phishing_score=phishing_score,
+        phishing_score=
+        phishing_score,
 
-        completion=completion,
+        completion=
+        completion,
 
-        risk=risk_level(score),
+        risk=
+        risk_level(score),
 
-        labels=labels,
+        labels=
+        labels,
 
-        values=values,
+        values=
+        values,
 
         recommendations=
-        recommendations_for_user(user_id)
+        recommendations_for_user(
+            user_id
+        )
     )
 
 
@@ -751,7 +813,10 @@ def dashboard():
 # TRAINING LIST
 # =========================================================
 
-@app.route("/training")
+@app.route(
+    "/training",
+    methods=["GET"]
+)
 @login_required
 def training():
 
@@ -771,21 +836,19 @@ def training():
 
 
     return render_template(
-
         "training.html",
-
         modules=modules,
-
         done=completed_ids
     )
 
 
 # =========================================================
-# TRAINING MODULE
+# OPEN TRAINING MODULE
 # =========================================================
 
 @app.route(
-    "/training/<int:module_id>"
+    "/training/<int:module_id>",
+    methods=["GET"]
 )
 @login_required
 def training_module(module_id):
@@ -796,9 +859,7 @@ def training_module(module_id):
 
 
     return render_template(
-
         "training_module.html",
-
         module=module
     )
 
@@ -819,22 +880,22 @@ def complete_module(module_id):
     ]
 
 
+    module = TrainingModule.query.get_or_404(
+        module_id
+    )
+
+
     progress = ModuleProgress.query.filter_by(
-
         user_id=user_id,
-
-        module_id=module_id
-
+        module_id=module.id
     ).first()
 
 
     if not progress:
 
         progress = ModuleProgress(
-
             user_id=user_id,
-
-            module_id=module_id
+            module_id=module.id
         )
 
         db.session.add(
@@ -844,7 +905,9 @@ def complete_module(module_id):
 
     progress.completed = True
 
-    progress.completed_at = datetime.utcnow()
+    progress.completed_at = (
+        datetime.utcnow()
+    )
 
 
     db.session.commit()
@@ -877,13 +940,23 @@ def quiz():
 
     if request.method == "POST":
 
-        total_questions = len(
-            questions
-        )
+        if not questions:
+
+            flash(
+                "No quiz questions are available.",
+                "warning"
+            )
+
+            return redirect(
+                url_for("dashboard")
+            )
+
 
         total_correct = 0
 
         topic_results = {}
+
+        submitted_answers = {}
 
 
         for question in questions:
@@ -891,6 +964,23 @@ def quiz():
             selected_answer = request.form.get(
                 f"q{question.id}"
             )
+
+
+            if not selected_answer:
+
+                flash(
+                    "Please answer every quiz question.",
+                    "warning"
+                )
+
+                return redirect(
+                    url_for("quiz")
+                )
+
+
+            submitted_answers[
+                question.id
+            ] = selected_answer
 
 
             if question.topic not in topic_results:
@@ -920,32 +1010,19 @@ def quiz():
                 ]["correct"] += 1
 
 
-        # Calculate quiz score
-
-        if total_questions:
-
-            score = (
-                total_correct
-                / total_questions
-            ) * 100
-
-        else:
-
-            score = 0
-
-
         score = round(
-            score,
+            (
+                total_correct
+                / len(questions)
+            ) * 100,
             1
         )
 
 
-        # Save quiz attempt
-
         attempt = QuizAttempt(
-
-            user_id=session["user_id"],
-
+            user_id=session[
+                "user_id"
+            ],
             score=score
         )
 
@@ -954,38 +1031,55 @@ def quiz():
             attempt
         )
 
-
         db.session.flush()
 
 
-        # Save topic scores
+        # Save each quiz answer
 
-        for topic, result in topic_results.items():
+        for question in questions:
 
-            if result["total"]:
+            selected_answer = submitted_answers[
+                question.id
+            ]
 
-                topic_score = (
-                    result["correct"]
-                    / result["total"]
-                ) * 100
-
-            else:
-
-                topic_score = 0
+            is_correct = (
+                selected_answer
+                == question.correct_answer
+            )
 
 
-            record = TopicScore(
-
+            quiz_answer = QuizAnswer(
                 attempt_id=attempt.id,
-
-                topic=topic,
-
-                score=topic_score
+                question_id=question.id,
+                selected_answer=selected_answer,
+                correct=is_correct
             )
 
 
             db.session.add(
-                record
+                quiz_answer
+            )
+
+
+        # Save topic-level score
+
+        for topic, result in topic_results.items():
+
+            topic_score = round(
+                (
+                    result["correct"]
+                    / result["total"]
+                ) * 100,
+                1
+            )
+
+
+            db.session.add(
+                TopicScore(
+                    attempt_id=attempt.id,
+                    topic=topic,
+                    score=topic_score
+                )
             )
 
 
@@ -1004,15 +1098,13 @@ def quiz():
 
 
     return render_template(
-
         "quiz.html",
-
         questions=questions
     )
 
 
 # =========================================================
-# PHISHING SCENARIOS LIST
+# PHISHING LIST
 # =========================================================
 
 @app.route("/phishing")
@@ -1023,9 +1115,7 @@ def phishing():
 
 
     return render_template(
-
         "phishing.html",
-
         scenarios=scenarios
     )
 
@@ -1058,6 +1148,24 @@ def phishing_scenario(
         )
 
 
+        if choice not in [
+            "malicious",
+            "legitimate"
+        ]:
+
+            flash(
+                "Please select an answer.",
+                "warning"
+            )
+
+            return redirect(
+                url_for(
+                    "phishing_scenario",
+                    scenario_id=scenario.id
+                )
+            )
+
+
         selected_malicious = (
             choice == "malicious"
         )
@@ -1069,27 +1177,25 @@ def phishing_scenario(
         )
 
 
-        phishing_attempt = PhishingAttempt(
-
-            user_id=session["user_id"],
-
+        attempt = PhishingAttempt(
+            user_id=session[
+                "user_id"
+            ],
             scenario_id=scenario.id,
-
             correct=correct
         )
 
 
         db.session.add(
-            phishing_attempt
+            attempt
         )
-
 
         db.session.commit()
 
 
         result = {
-
-            "correct": correct,
+            "correct":
+            correct,
 
             "explanation":
             scenario.explanation
@@ -1097,11 +1203,8 @@ def phishing_scenario(
 
 
     return render_template(
-
         "phishing_scenario.html",
-
         scenario=scenario,
-
         result=result
     )
 
@@ -1119,16 +1222,17 @@ def admin_dashboard():
     ).all()
 
 
-    employee_rows = []
+    rows = []
 
-
-    # -----------------------------------------------------
-    # EMPLOYEE-WISE STATISTICS
-    # -----------------------------------------------------
 
     for user in users:
 
-        score, quiz_avg, phishing_score, completion = awareness_score(
+        (
+            score,
+            quiz_average,
+            phishing_score,
+            completion
+        ) = awareness_score(
             user.id
         )
 
@@ -1138,8 +1242,7 @@ def admin_dashboard():
         ).count()
 
 
-        employee_rows.append({
-
+        rows.append({
             "name":
             user.name,
 
@@ -1150,7 +1253,7 @@ def admin_dashboard():
             score,
 
             "quiz_avg":
-            quiz_avg,
+            quiz_average,
 
             "quiz_attempts":
             quiz_attempts,
@@ -1158,28 +1261,23 @@ def admin_dashboard():
             "phishing_score":
             phishing_score,
 
-            "risk":
-            risk_level(score),
-
             "completion":
-            completion
+            completion,
+
+            "risk":
+            risk_level(score)
         })
 
 
-    # -----------------------------------------------------
-    # AVERAGE AWARENESS SCORE
-    # -----------------------------------------------------
+    # Average Awareness Score
 
-    if employee_rows:
+    if rows:
 
         avg_score = round(
-
             sum(
                 row["score"]
-                for row in employee_rows
-            )
-            / len(employee_rows),
-
+                for row in rows
+            ) / len(rows),
             1
         )
 
@@ -1188,25 +1286,26 @@ def admin_dashboard():
         avg_score = 0
 
 
-    # -----------------------------------------------------
-    # QUIZ PERFORMANCE
-    # -----------------------------------------------------
+    # Quiz Statistics
 
-    all_quiz_attempts = QuizAttempt.query.all()
+    all_quiz_attempts = QuizAttempt.query.order_by(
+        QuizAttempt.created_at.asc()
+    ).all()
 
 
-    # Average Quiz Score
+    quiz_attempt_count = len(
+        all_quiz_attempts
+    )
+
 
     if all_quiz_attempts:
 
         avg_quiz_score = round(
-
             sum(
                 attempt.score
                 for attempt in all_quiz_attempts
             )
             / len(all_quiz_attempts),
-
             1
         )
 
@@ -1215,25 +1314,16 @@ def admin_dashboard():
         avg_quiz_score = 0
 
 
-    # Number of Quiz Attempts
+    # Overall Training Completion
 
-    quiz_attempt_count = QuizAttempt.query.count()
-
-
-    # -----------------------------------------------------
-    # OVERALL TRAINING COMPLETION
-    # -----------------------------------------------------
-
-    if employee_rows:
+    if rows:
 
         overall_training_completion = round(
-
             sum(
                 row["completion"]
-                for row in employee_rows
+                for row in rows
             )
-            / len(employee_rows),
-
+            / len(rows),
             1
         )
 
@@ -1242,78 +1332,127 @@ def admin_dashboard():
         overall_training_completion = 0
 
 
-    # -----------------------------------------------------
-    # RISK DISTRIBUTION
-    # -----------------------------------------------------
+    # Risk Distribution
 
     risk_counts = {
-
         "Low": 0,
-
         "Moderate": 0,
-
         "High": 0,
-
         "Critical": 0
     }
 
 
-    for row in employee_rows:
+    for row in rows:
 
         risk_counts[
             row["risk"]
         ] += 1
 
 
-    # -----------------------------------------------------
-    # QUIZ PERFORMANCE CHART
-    # -----------------------------------------------------
+    # Quiz Performance Chart Data
 
-    quiz_chart_labels = []
-
-    quiz_chart_values = []
-
-
-    for index, attempt in enumerate(
-        all_quiz_attempts,
-        start=1
-    ):
-
-        quiz_chart_labels.append(
-            f"Attempt {index}"
+    quiz_chart_labels = [
+        f"Attempt {index}"
+        for index in range(
+            1,
+            len(all_quiz_attempts) + 1
         )
-
-        quiz_chart_values.append(
-            attempt.score
-        )
+    ]
 
 
-    # -----------------------------------------------------
-    # RENDER ADMIN PAGE
-    # -----------------------------------------------------
+    quiz_chart_values = [
+        attempt.score
+        for attempt in all_quiz_attempts
+    ]
+
+
+    # Most Frequently Incorrect Questions
+
+    incorrect_questions = []
+
+
+    questions = Question.query.all()
+
+
+    for question in questions:
+
+        total_answers = QuizAnswer.query.filter_by(
+            question_id=question.id
+        ).count()
+
+
+        wrong_count = QuizAnswer.query.filter_by(
+            question_id=question.id,
+            correct=False
+        ).count()
+
+
+        if total_answers > 0:
+
+            incorrect_percentage = round(
+                (
+                    wrong_count
+                    / total_answers
+                ) * 100,
+                1
+            )
+
+        else:
+
+            incorrect_percentage = 0
+
+
+        incorrect_questions.append({
+            "question":
+            question.question,
+
+            "topic":
+            question.topic,
+
+            "wrong_count":
+            wrong_count,
+
+            "incorrect_percentage":
+            incorrect_percentage
+        })
+
+
+    incorrect_questions.sort(
+        key=lambda item:
+        item["wrong_count"],
+        reverse=True
+    )
+
 
     return render_template(
-
         "admin.html",
 
-        rows=employee_rows,
+        rows=
+        rows,
 
-        avg_score=avg_score,
+        avg_score=
+        avg_score,
 
-        avg_quiz_score=avg_quiz_score,
+        avg_quiz_score=
+        avg_quiz_score,
 
-        quiz_attempt_count=quiz_attempt_count,
+        quiz_attempt_count=
+        quiz_attempt_count,
 
         overall_training_completion=
         overall_training_completion,
 
-        risk_counts=risk_counts,
+        risk_counts=
+        risk_counts,
 
         quiz_chart_labels=
         quiz_chart_labels,
 
         quiz_chart_values=
-        quiz_chart_values
+        quiz_chart_values,
+
+        incorrect_questions=
+        incorrect_questions
     )
 
 
@@ -1335,13 +1474,17 @@ def stats_api():
 
     for user in users:
 
-        score, quiz_avg, phishing_score, completion = awareness_score(
+        (
+            score,
+            quiz_average,
+            phishing_score,
+            completion
+        ) = awareness_score(
             user.id
         )
 
 
         data.append({
-
             "name":
             user.name,
 
@@ -1349,16 +1492,16 @@ def stats_api():
             score,
 
             "quiz_average":
-            quiz_avg,
+            quiz_average,
 
             "phishing_score":
             phishing_score,
 
-            "risk":
-            risk_level(score),
-
             "completion":
             completion,
+
+            "risk":
+            risk_level(score),
 
             "quiz_attempts":
             QuizAttempt.query.filter_by(
@@ -1373,11 +1516,10 @@ def stats_api():
 
 
 # =========================================================
-# INITIAL SAMPLE DATA
+# SEED DATA
 # =========================================================
 
 def seed_data():
-
 
     # -----------------------------------------------------
     # TRAINING MODULES
@@ -1391,42 +1533,44 @@ def seed_data():
                 "Phishing",
                 "Recognising Phishing",
                 "Check sender addresses, suspicious links, "
-                "urgent language, spelling, and unexpected attachments."
+                "urgent language, spelling mistakes and "
+                "unexpected attachments."
             ),
 
             (
                 "Password Security",
                 "Strong Password Practices",
-                "Use long unique passwords, avoid password reuse, "
-                "and use a password manager where possible."
+                "Use long unique passwords, avoid password "
+                "reuse and use a password manager where possible."
             ),
 
             (
                 "Social Engineering",
                 "Social Engineering Awareness",
-                "Verify unusual requests, especially requests "
-                "for money, credentials, or sensitive information."
+                "Verify unusual requests for money, credentials "
+                "or sensitive information through a trusted channel."
             ),
 
             (
                 "Malware",
                 "Malware Basics",
-                "Avoid unknown downloads, keep software updated, "
-                "and report suspicious behaviour."
+                "Avoid unknown downloads, keep software updated "
+                "and report suspicious system behaviour."
             ),
 
             (
                 "Safe Browsing",
                 "Safe Browsing Habits",
-                "Use HTTPS, avoid suspicious websites, "
-                "keep browsers updated, and do not bypass warnings."
+                "Use HTTPS where appropriate, avoid suspicious "
+                "sites and pay attention to browser warnings."
             ),
 
             (
                 "Multi-Factor Authentication",
                 "Using MFA",
-                "MFA adds another verification step and reduces "
-                "the impact of stolen passwords."
+                "Multi-factor authentication adds another "
+                "verification step and reduces the impact "
+                "of stolen passwords."
             )
         ]
 
@@ -1434,13 +1578,9 @@ def seed_data():
         for topic, title, content in modules:
 
             db.session.add(
-
                 TrainingModule(
-
                     topic=topic,
-
                     title=title,
-
                     content=content
                 )
             )
@@ -1479,15 +1619,15 @@ def seed_data():
                 "What should you do with an unusual payment request?",
                 "Pay immediately",
                 "Verify through a trusted channel",
-                "Forward to everyone",
-                "Ignore policy",
+                "Forward it to everyone",
+                "Ignore company policy",
                 "B"
             ),
 
             (
                 "Malware",
                 "What is the safest action for an unknown attachment?",
-                "Open it",
+                "Open it immediately",
                 "Disable antivirus",
                 "Verify before opening",
                 "Upload it publicly",
@@ -1499,8 +1639,8 @@ def seed_data():
                 "What does HTTPS mainly indicate?",
                 "Encrypted browser-server connection",
                 "Website is always trustworthy",
-                "No malware exists",
-                "The site is government-owned",
+                "No malware can exist",
+                "Website is government-owned",
                 "A"
             ),
 
@@ -1510,7 +1650,7 @@ def seed_data():
                 "It removes passwords",
                 "It adds another verification layer",
                 "It makes usernames secret",
-                "It blocks all phishing",
+                "It blocks every phishing attack",
                 "B"
             )
         ]
@@ -1518,26 +1658,16 @@ def seed_data():
 
         for item in questions:
 
-            question = Question(
-
-                topic=item[0],
-
-                question=item[1],
-
-                option_a=item[2],
-
-                option_b=item[3],
-
-                option_c=item[4],
-
-                option_d=item[5],
-
-                correct_answer=item[6]
-            )
-
-
             db.session.add(
-                question
+                Question(
+                    topic=item[0],
+                    question=item[1],
+                    option_a=item[2],
+                    option_b=item[3],
+                    option_c=item[4],
+                    option_d=item[5],
+                    correct_answer=item[6]
+                )
             )
 
 
@@ -1547,57 +1677,51 @@ def seed_data():
 
     if PhishingScenario.query.count() == 0:
 
-        phishing_one = PhishingScenario(
+        db.session.add(
+            PhishingScenario(
+                sender=
+                "security-update@micr0soft-support.example",
 
-            sender=
-            "security-update@micr0soft-support.example",
+                subject=
+                "URGENT: Your account will be closed today",
 
-            subject=
-            "URGENT: Your account will be closed today",
+                body=
+                "Click the link immediately and verify "
+                "your password to keep your account active.",
 
-            body=
-            "Click the link immediately and verify your password "
-            "to keep your account active.",
+                malicious=True,
 
-            malicious=True,
-
-            explanation=
-            "The message uses urgency, a suspicious sender domain, "
-            "and asks for credentials."
-        )
-
-
-        phishing_two = PhishingScenario(
-
-            sender=
-            "hr@smallbizconnect.local",
-
-            subject=
-            "Updated staff meeting agenda",
-
-            body=
-            "The updated agenda is available in the internal staff "
-            "portal. No login link is included in this email.",
-
-            malicious=False,
-
-            explanation=
-            "This message does not pressure the user, request "
-            "credentials, or use a suspicious external link."
+                explanation=
+                "This message uses urgency, a suspicious "
+                "sender domain and requests credentials."
+            )
         )
 
 
         db.session.add(
-            phishing_one
-        )
+            PhishingScenario(
+                sender=
+                "hr@smallbizconnect.local",
 
-        db.session.add(
-            phishing_two
+                subject=
+                "Updated staff meeting agenda",
+
+                body=
+                "The updated agenda is available in the "
+                "internal staff portal. No login link is "
+                "included in this email.",
+
+                malicious=False,
+
+                explanation=
+                "This message does not pressure the user, "
+                "request credentials or use a suspicious link."
+            )
         )
 
 
     # -----------------------------------------------------
-    # ADMIN ACCOUNT
+    # ADMIN USER
     # -----------------------------------------------------
 
     admin_email = (
@@ -1613,7 +1737,6 @@ def seed_data():
     if not existing_admin:
 
         admin = User(
-
             name=
             "CyberAware Admin",
 
