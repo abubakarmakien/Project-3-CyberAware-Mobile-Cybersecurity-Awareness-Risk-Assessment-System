@@ -1,0 +1,58 @@
+Week 1
+
+Planned:
+Understand the quiz, scoring and progress requirements.
+
+Finished:
+I helped define user stories for the cybersecurity quiz, awareness score and progress tracking functionality.
+
+Obstacles:
+The team needed to decide how quiz results should contribute to the awareness score.
+
+Solution:
+We agreed to store quiz results and topic performance so that scores and recommendations could be generated.
+
+Next Week:
+I plan to work on quiz and scoring functionality.
+
+
+Week 2
+
+Planned:
+Develop the quiz and performance tracking functions.
+
+Finished:
+I worked on the cybersecurity quiz, quiz scoring and performance tracking. I also helped store quiz attempts and topic-level results.
+
+Obstacles:
+The main challenge was correctly recording user answers and calculating scores.
+
+Solution:
+The quiz processing logic was tested with multiple answers and attempts.
+
+What Did Not Work:
+Some early score calculations required adjustment.
+
+Not Finished:
+The analytics for frequently incorrect questions still needed further work.
+
+Next Week:
+I plan to complete scoring analytics and progress tracking.
+
+
+Week 3
+
+Planned:
+Complete quiz analytics and test awareness scoring.
+
+Finished:
+I worked on awareness scoring, employee progress tracking and frequently incorrect question analytics. I tested quiz submissions and score history.
+
+Obstacles:
+The analytics required correct linking between quiz attempts and individual question results.
+
+Solution:
+The data relationships and query logic were checked and corrected.
+
+Next Week:
+I plan to support dashboard integration and prototype testing.
