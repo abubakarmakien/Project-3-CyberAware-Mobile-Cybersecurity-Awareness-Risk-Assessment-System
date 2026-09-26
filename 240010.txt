@@ -59,3 +59,27 @@ The result and explanation flow was reviewed and tested.
 
 Next Week:
 I plan to help with prototype testing, interface improvements and presentation preparation.
+
+
+Week 4
+
+Planned:
+Complete final testing of training and phishing functions and support report and presentation evidence.
+
+Finished:
+I retested the cybersecurity training modules and phishing scenario assessment. I checked that training completion, phishing feedback and navigation worked correctly. I also supported the preparation of browser screenshots and presentation material for these features.
+
+Obstacles:
+The main challenge was selecting clear screenshots that showed the training and phishing functionality properly.
+
+Solution:
+I repeated the main user flow and captured clearer evidence after confirming that the functions worked as expected.
+
+What Did Not Work:
+Some earlier screenshots did not show enough information to explain the feature clearly, so they were replaced with better examples.
+
+Not Finished:
+Only final presentation practice and any small interface corrections remained.
+
+Next Week:
+I plan to support the final demonstration and explain the training and phishing features during the class presentation.
