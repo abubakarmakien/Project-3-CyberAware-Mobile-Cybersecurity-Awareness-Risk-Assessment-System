@@ -1721,45 +1721,40 @@ def seed_data():
         )
 
 
-    # -----------------------------------------------------
-    # ADMIN USER
-    # -----------------------------------------------------
+# -----------------------------------------------------
+# ADMIN USER
+# -----------------------------------------------------
 
-    admin_email = (
-        "admin@cyberaware.local"
+admin_email = "admin@cyberaware.local"
+
+existing_admin = User.query.filter_by(
+    email=admin_email
+).first()
+
+if existing_admin:
+
+    existing_admin.name = "CyberAware Admin"
+    existing_admin.role = "admin"
+
+    # Reset admin password to demo password
+    existing_admin.password_hash = generate_password_hash(
+        "Admin123!"
     )
 
+else:
 
-    existing_admin = User.query.filter_by(
-        email=admin_email
-    ).first()
+    admin = User(
+        name="CyberAware Admin",
+        email=admin_email,
+        password_hash=generate_password_hash(
+            "Admin123!"
+        ),
+        role="admin"
+    )
 
+    db.session.add(admin)
 
-    if not existing_admin:
-
-        admin = User(
-            name=
-            "CyberAware Admin",
-
-            email=
-            admin_email,
-
-            password_hash=
-            generate_password_hash(
-                "Admin123!"
-            ),
-
-            role=
-            "admin"
-        )
-
-
-        db.session.add(
-            admin
-        )
-
-
-    db.session.commit()
+db.session.commit()
 
 
 # =========================================================
