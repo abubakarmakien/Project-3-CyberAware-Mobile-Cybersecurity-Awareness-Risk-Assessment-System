@@ -1,1 +1,8 @@
-{% extends 'base.html' %}{% block content %}<h2>{{module.title}}</h2><div class="card card-body"><p>{{module.content}}</p><form method="post"><button class="btn btn-success">Mark Completed</button></form></div>{% endblock %}
+{% extends 'base.html' %}{% block content %}<h2>{{module.title}}</h2><div class="card card-body"><p>{{module.content}}</p><form method="POST"
+      action="{{ url_for('complete_module', module_id=module.id) }}">
+
+    <button type="submit" class="btn btn-success">
+        Mark as Completed
+    </button>
+
+</form></div>{% endblock %}
