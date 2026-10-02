@@ -290,26 +290,42 @@ def training_module(module_id):
     ).first()
     return render_template("training_module.html", module=module, completed=bool(progress))
 
-@app.route("/training/<int:module_id>/complete", methods=["POST"])
+@app.route(
+    "/training/<int:module_id>/complete",
+    methods=["GET", "POST"]
+)
 @login_required
 def complete_module(module_id):
+
     user_id = session["user_id"]
+
     module = TrainingModule.query.get_or_404(module_id)
 
     progress = ModuleProgress.query.filter_by(
-        user_id=user_id, module_id=module.id
+        user_id=user_id,
+        module_id=module.id
     ).first()
 
     if not progress:
-        progress = ModuleProgress(user_id=user_id, module_id=module.id)
+        progress = ModuleProgress(
+            user_id=user_id,
+            module_id=module.id
+        )
         db.session.add(progress)
 
     progress.completed = True
     progress.completed_at = datetime.utcnow()
+
     db.session.commit()
 
-    flash("Module marked as completed.", "success")
-    return redirect(url_for("training"))
+    flash(
+        "Module marked as completed.",
+        "success"
+    )
+
+    return redirect(
+        url_for("training")
+    )
 
 @app.route("/quiz", methods=["GET", "POST"])
 @login_required
