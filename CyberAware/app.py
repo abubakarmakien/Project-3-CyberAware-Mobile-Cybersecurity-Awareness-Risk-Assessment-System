@@ -301,7 +301,8 @@ class PhishingAttempt(db.Model):
         db.DateTime,
         default=datetime.utcnow
     )
-
+with app.app_context():
+    db.create_all()
 
 # =========================================================
 # AUTH HELPERS
