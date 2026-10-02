@@ -1,159 +1,117 @@
+from flask import (
+    Flask,
+    render_template,
+    request,
+    redirect,
+    url_for,
+    session,
+    flash,
+    jsonify
 )
 
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+from flask_sqlalchemy import SQLAlchemy
+from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import datetime
+from functools import wraps
+import os
+                    option_c=item[4],
+                    option_d=item[5],
+                    correct_answer=item[6]
+                )
+            )
 
-db = SQLAlchemy(app)
+
+    # -----------------------------------------------------
+    # PHISHING SCENARIOS
+    # -----------------------------------------------------
+
+    if PhishingScenario.query.count() == 0:
+
+        db.session.add(
+            PhishingScenario(
+                sender=
+                "security-update@micr0soft-support.example",
+
+                subject=
+                "URGENT: Your account will be closed today",
+
+                body=
+                "Click the link immediately and verify "
+                "your password to keep your account active.",
+
+                malicious=True,
+
+                explanation=
+                "This message uses urgency, a suspicious "
+                "sender domain and requests credentials."
+            )
+        )
+
+
+        db.session.add(
+            PhishingScenario(
+                sender=
+                "hr@smallbizconnect.local",
+
+                subject=
+                "Updated staff meeting agenda",
+
+                body=
+                "The updated agenda is available in the "
+                "internal staff portal. No login link is "
+                "included in this email.",
+
+                malicious=False,
+
+                explanation=
+                "This message does not pressure the user, "
+                "request credentials or use a suspicious link."
+            )
+        )
+
+
+    # -----------------------------------------------------
+    # ADMIN USER
+    # -----------------------------------------------------
+
+    admin_email = "admin@cyberaware.local"
+
+    existing_admin = User.query.filter_by(
+        email=admin_email
+    ).first()
+
+    if existing_admin:
+        existing_admin.name = "CyberAware Admin"
+        existing_admin.role = "admin"
+        existing_admin.password_hash = generate_password_hash(
+            "Admin123!"
+        )
+    else:
+        admin = User(
+            name="CyberAware Admin",
+            email=admin_email,
+            password_hash=generate_password_hash(
+                "Admin123!"
+            ),
+            role="admin"
+        )
+        db.session.add(admin)
+
+    db.session.commit()
 
 
 # =========================================================
-# DATABASE MODELS
+# INITIALISE DATABASE AND SEED DATA
 # =========================================================
 
-class User(db.Model):
-    id = db.Column(
-        db.Integer,
-        primary_key=True
-    )
-
-    name = db.Column(
-        db.String(100),
-        nullable=False
-    )
-
-    email = db.Column(
-        db.String(120),
-        unique=True,
-        nullable=False
-    )
-
-    password_hash = db.Column(
-        db.String(255),
-        nullable=False
-    )
-
-    role = db.Column(
-        db.String(20),
-        default="employee",
-        nullable=False
-    )
-
-    created_at = db.Column(
-        db.DateTime,
-        default=datetime.utcnow
-    )
+with app.app_context():
+    db.create_all()
+    seed_data()
 
 
-class TrainingModule(db.Model):
-    id = db.Column(
-        db.Integer,
-        primary_key=True
-    )
+# =========================================================
+# START APPLICATION
+# =========================================================
 
-    topic = db.Column(
-        db.String(100),
-        nullable=False
-    )
-
-    title = db.Column(
-        db.String(150),
-        nullable=False
-    )
-
-    content = db.Column(
-        db.Text,
-        nullable=False
-    )
-
-
-class ModuleProgress(db.Model):
-    id = db.Column(
-        db.Integer,
-        primary_key=True
-    )
-
-    user_id = db.Column(
-        db.Integer,
-        db.ForeignKey("user.id"),
-        nullable=False
-    )
-
-    module_id = db.Column(
-        db.Integer,
-        db.ForeignKey("training_module.id"),
-        nullable=False
-    )
-
-    completed = db.Column(
-        db.Boolean,
-        default=False
-    )
-
-    completed_at = db.Column(
-        db.DateTime
-    )
-
-
-class Question(db.Model):
-    id = db.Column(
-        db.Integer,
-        primary_key=True
-    )
-
-    topic = db.Column(
-        db.String(100),
-        nullable=False
-    )
-
-    question = db.Column(
-        db.Text,
-        nullable=False
-    )
-
-    option_a = db.Column(
-        db.String(255),
-        nullable=False
-    )
-
-    option_b = db.Column(
-        db.String(255),
-        nullable=False
-    )
-
-    option_c = db.Column(
-        db.String(255),
-        nullable=False
-    )
-
-    option_d = db.Column(
-        db.String(255),
-        nullable=False
-    )
-
-    correct_answer = db.Column(
-        db.String(1),
-        nullable=False
-    )
-
-
-class QuizAttempt(db.Model):
-    id = db.Column(
-        db.Integer,
-        primary_key=True
-    )
-
-    user_id = db.Column(
-        db.Integer,
-        db.ForeignKey("user.id"),
-        nullable=False
-    )
-
-    score = db.Column(
-        db.Float,
-        nullable=False
-    )
-
-    created_at = db.Column(
-        db.DateTime,
-        default=datetime.utcnow
-    )
-
+if __name__ == "__main__":
+    app.run(debug=True)
