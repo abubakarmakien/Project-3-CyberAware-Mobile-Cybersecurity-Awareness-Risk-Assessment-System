@@ -1,602 +1,1212 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
-from flask_sqlalchemy import SQLAlchemy
-from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime
-from functools import wraps
+
 import os
+import sqlite3
+import secrets
+import functools
+from datetime import datetime, timezone
+from pathlib import Path
+
+from flask import (
+    Flask, render_template, request, redirect,
+    url_for, session, flash, abort, g
+)
+from werkzeug.security import (
+    generate_password_hash, check_password_hash
+)
+
+BASE = Path(__file__).resolve().parent
 
 app = Flask(__name__)
-app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "cyberaware-development-secret-key")
-app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", "sqlite:///cyberaware.db")
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config.update(
+    SECRET_KEY=os.environ.get(
+        "SECRET_KEY", secrets.token_hex(32)
+    ),
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=(
+        os.environ.get("COOKIE_SECURE", "0") == "1"
+    ),
+    MAX_CONTENT_LENGTH=1024 * 1024
+)
 
-db = SQLAlchemy(app)
+DB_PATH = os.environ.get(
+    "DATABASE_PATH",
+    str(BASE / "cyberaware.sqlite3")
+)
 
-# -------------------------
-# DATABASE MODELS
-# -------------------------
+# ==========================================
+# SIX CYBERSECURITY TRAINING MODULES
+# ==========================================
 
-class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=False)
-    password_hash = db.Column(db.String(255), nullable=False)
-    role = db.Column(db.String(20), default="employee", nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+MODULES = [
+    (
+        1, "Phishing Awareness",
+        "Recognise fake emails and messages",
+        "Phishing is when a criminal pretends to be someone "
+        "you trust to steal information. The message may ask "
+        "you to click a link, open a file or enter a password. "
+        "It may look like it came from your bank, employer or "
+        "delivery company.",
+        "Check the sender address carefully.|"
+        "Be cautious of urgent requests and unexpected attachments.|"
+        "Do not enter passwords after clicking an unexpected link.|"
+        "Report suspicious messages to your IT or security team.",
+        "Suspicious message",
+        "Pause and check",
+        "Report or delete",
+        "#2563eb"
+    ),
+    (
+        2, "Password Security",
+        "Build strong account protection",
+        "A password protects your account. Weak, reused passwords "
+        "make it easier for an attacker to access several systems. "
+        "A long, unique passphrase is easier to remember and harder "
+        "to guess. A password manager can generate and store unique "
+        "passwords.",
+        "Use a long and unique password for each service.|"
+        "Store passwords in an approved password manager.|"
+        "Never share passwords or verification codes.|"
+        "Change credentials promptly if you suspect compromise.",
+        "Unique passphrase",
+        "Password manager",
+        "Protected account",
+        "#8b5cf6"
+    ),
+    (
+        3, "Social Engineering",
+        "Verify unusual requests",
+        "Social engineering is when someone tricks a person into "
+        "sharing data, money or access. Criminals can impersonate "
+        "a manager or colleague. They might call, text or send a "
+        "convincing email and create a feeling of urgency.",
+        "Verify payment or account changes using a trusted channel.|"
+        "Do not trust a caller just because they know a name.|"
+        "Never bypass security checks for urgent requests.|"
+        "Inform your supervisor or IT team about suspicious contact.",
+        "Unexpected request",
+        "Verify identity",
+        "Act safely",
+        "#db2777"
+    ),
+    (
+        4, "Malware Protection",
+        "Keep devices and files safe",
+        "Malware is harmful software such as ransomware, spyware "
+        "and viruses. It can arrive through unsafe downloads, "
+        "infected attachments or compromised websites. Updated "
+        "software and careful file handling reduce the risk.",
+        "Install software only from approved sources.|"
+        "Keep operating systems and apps updated.|"
+        "Do not open unknown attachments or macros.|"
+        "Report unusual pop-ups, lock screens or device behaviour.",
+        "Unknown file",
+        "Scan and verify",
+        "Safe device",
+        "#ea580c"
+    ),
+    (
+        5, "Safe Browsing",
+        "Stay alert on websites",
+        "Websites can imitate trusted organisations. HTTPS encrypts "
+        "the connection but does not guarantee that a website is "
+        "honest. Check addresses before logging in, and be careful "
+        "with downloads, browser warnings and public Wi-Fi.",
+        "Check the full website address before entering details.|"
+        "Do not ignore browser security warnings.|"
+        "Avoid unexpected downloads and suspicious advertisements.|"
+        "Use company-approved tools when accessing work data remotely.",
+        "Open link",
+        "Inspect address",
+        "Browse safely",
+        "#0891b2"
+    ),
+    (
+        6, "Multi-Factor Authentication",
+        "Add a second verification step",
+        "Multi-factor authentication (MFA) asks for another proof "
+        "of identity in addition to a password. This may be an "
+        "authenticator app or hardware security key. MFA helps "
+        "even if a password is stolen, but attackers may still "
+        "try to trick you into approving requests.",
+        "Use an approved authenticator or security key.|"
+        "Never share a one-time code with anyone.|"
+        "Reject unexpected MFA approval requests.|"
+        "Report repeated or suspicious prompts immediately.",
+        "Enter password",
+        "Verify second factor",
+        "Access account",
+        "#16a34a"
+    )
+]
 
-class TrainingModule(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    topic = db.Column(db.String(100), nullable=False)
-    title = db.Column(db.String(150), nullable=False)
-    content = db.Column(db.Text, nullable=False)
 
-class ModuleProgress(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
-    module_id = db.Column(db.Integer, db.ForeignKey("training_module.id"), nullable=False)
-    completed = db.Column(db.Boolean, default=False)
-    completed_at = db.Column(db.DateTime)
-    __table_args__ = (db.UniqueConstraint("user_id", "module_id", name="uq_user_module"),)
+# ==========================================
+# DATABASE CONNECTION
+# ==========================================
 
-class Question(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    topic = db.Column(db.String(100), nullable=False)
-    question = db.Column(db.Text, nullable=False)
-    option_a = db.Column(db.String(255), nullable=False)
-    option_b = db.Column(db.String(255), nullable=False)
-    option_c = db.Column(db.String(255), nullable=False)
-    option_d = db.Column(db.String(255), nullable=False)
-    correct_answer = db.Column(db.String(1), nullable=False)
+def db():
+    if "db" not in g:
+        p = Path(DB_PATH)
+        p.parent.mkdir(parents=True, exist_ok=True)
 
-class QuizAttempt(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
-    score = db.Column(db.Float, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+        g.db = sqlite3.connect(str(p), timeout=15)
+        g.db.row_factory = sqlite3.Row
+        g.db.execute("PRAGMA foreign_keys=ON")
 
-class TopicScore(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    attempt_id = db.Column(db.Integer, db.ForeignKey("quiz_attempt.id"), nullable=False)
-    topic = db.Column(db.String(100), nullable=False)
-    score = db.Column(db.Float, nullable=False)
+    return g.db
 
-class QuizAnswer(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    attempt_id = db.Column(db.Integer, db.ForeignKey("quiz_attempt.id"), nullable=False)
-    question_id = db.Column(db.Integer, db.ForeignKey("question.id"), nullable=False)
-    selected_answer = db.Column(db.String(1), nullable=False)
-    correct = db.Column(db.Boolean, nullable=False)
 
-class PhishingScenario(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    sender = db.Column(db.String(150), nullable=False)
-    subject = db.Column(db.String(255), nullable=False)
-    body = db.Column(db.Text, nullable=False)
-    malicious = db.Column(db.Boolean, nullable=False)
-    explanation = db.Column(db.Text, nullable=False)
+@app.teardown_appcontext
+def close_db(_):
+    conn = g.pop("db", None)
+    if conn:
+        conn.close()
 
-class PhishingAttempt(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
-    scenario_id = db.Column(db.Integer, db.ForeignKey("phishing_scenario.id"), nullable=False)
-    correct = db.Column(db.Boolean, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-# -------------------------
-# AUTH HELPERS
-# -------------------------
+def initialize():
+    d = db()
 
-def login_required(view):
-    @wraps(view)
-    def wrapped(*args, **kwargs):
-        if "user_id" not in session:
-            flash("Please log in first.", "warning")
-            return redirect(url_for("login"))
-        return view(*args, **kwargs)
-    return wrapped
+    d.executescript("""
+        CREATE TABLE IF NOT EXISTS users(
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+            password_hash TEXT NOT NULL,
+            role TEXT NOT NULL CHECK(
+                role IN ('admin','employee')
+            ),
+            must_change INTEGER NOT NULL DEFAULT 0
+        );
 
-def admin_required(view):
-    @wraps(view)
-    def wrapped(*args, **kwargs):
-        if "user_id" not in session:
-            flash("Please log in first.", "warning")
-            return redirect(url_for("login"))
-        if session.get("role") != "admin":
-            flash("Administrator access required.", "danger")
-            return redirect(url_for("dashboard"))
-        return view(*args, **kwargs)
-    return wrapped
+        CREATE TABLE IF NOT EXISTS assignments(
+            user_id INTEGER NOT NULL
+                REFERENCES users(id) ON DELETE CASCADE,
+            module_id INTEGER NOT NULL
+                CHECK(module_id BETWEEN 1 AND 6),
+            PRIMARY KEY(user_id,module_id)
+        );
 
-# -------------------------
-# SCORING
-# -------------------------
+        CREATE TABLE IF NOT EXISTS progress(
+            user_id INTEGER NOT NULL
+                REFERENCES users(id) ON DELETE CASCADE,
+            module_id INTEGER NOT NULL
+                CHECK(module_id BETWEEN 1 AND 6),
+            completed_at TEXT NOT NULL,
+            PRIMARY KEY(user_id,module_id)
+        );
 
-def awareness_score(user_id):
-    quiz_attempts = QuizAttempt.query.filter_by(user_id=user_id).all()
-    phishing_attempts = PhishingAttempt.query.filter_by(user_id=user_id).all()
-    completed_modules = ModuleProgress.query.filter_by(user_id=user_id, completed=True).count()
-    total_modules = TrainingModule.query.count()
+        CREATE TABLE IF NOT EXISTS quiz_attempts(
+            id INTEGER PRIMARY KEY,
+            user_id INTEGER NOT NULL
+                REFERENCES users(id) ON DELETE CASCADE,
+            module_id INTEGER NOT NULL
+                CHECK(module_id BETWEEN 1 AND 6),
+            correct INTEGER NOT NULL,
+            total INTEGER NOT NULL,
+            taken_at TEXT NOT NULL
+        );
+    """)
 
-    quiz_average = (
-        sum(a.score for a in quiz_attempts) / len(quiz_attempts)
-        if quiz_attempts else 0
+    email = os.environ.get(
+        "ADMIN_EMAIL", ""
+    ).strip().lower()
+
+    password = os.environ.get(
+        "ADMIN_PASSWORD", ""
     )
 
-    phishing_score = (
-        sum(1 for a in phishing_attempts if a.correct) / len(phishing_attempts) * 100
-        if phishing_attempts else 0
-    )
+    if email and len(password) >= 12:
+        admin = d.execute(
+            "SELECT id FROM users "
+            "WHERE role='admin' LIMIT 1"
+        ).fetchone()
 
-    completion = (
-        completed_modules / total_modules * 100
-        if total_modules else 0
-    )
-
-    final_score = 0.50 * quiz_average + 0.30 * phishing_score + 0.20 * completion
-
-    return (
-        round(final_score, 1),
-        round(quiz_average, 1),
-        round(phishing_score, 1),
-        round(completion, 1),
-    )
-
-def risk_level(score):
-    if score >= 80:
-        return "Low"
-    if score >= 60:
-        return "Moderate"
-    if score >= 40:
-        return "High"
-    return "Critical"
-
-def recommendations_for_user(user_id):
-    recommendations = []
-
-    latest_attempt = QuizAttempt.query.filter_by(user_id=user_id).order_by(
-        QuizAttempt.created_at.desc()
-    ).first()
-
-    if latest_attempt:
-        topic_scores = TopicScore.query.filter_by(attempt_id=latest_attempt.id).all()
-        for topic_score in topic_scores:
-            if topic_score.score < 60:
-                recommendations.append(
-                    f"Review the {topic_score.topic} training module and practise related questions."
+        if not admin:
+            d.execute(
+                "INSERT INTO users("
+                "name,email,password_hash,role"
+                ") VALUES(?,?,?,?)",
+                (
+                    "CyberAware Admin",
+                    email,
+                    generate_password_hash(password),
+                    "admin"
                 )
-    else:
-        recommendations.append("Complete the cybersecurity quiz.")
+            )
 
-    _, _, phishing_score, completion = awareness_score(user_id)
+    d.commit()
 
-    if phishing_score < 60:
-        recommendations.append("Practise more phishing scenarios.")
-    if completion < 100:
-        recommendations.append("Complete all training modules.")
-    if not recommendations:
-        recommendations.append("Good progress. Continue practising cybersecurity awareness activities.")
 
-    return recommendations
+# ==========================================
+# SECURITY AND AUTHENTICATION
+# ==========================================
 
-# -------------------------
-# ROUTES
-# -------------------------
+@app.before_request
+def prepare():
+    if request.endpoint == "static":
+        return
+
+    initialize()
+    g.user = None
+
+    uid = session.get("uid")
+
+    if uid:
+        g.user = db().execute(
+            "SELECT * FROM users WHERE id=?",
+            (uid,)
+        ).fetchone()
+
+    if request.method == "POST":
+        if not secrets.compare_digest(
+            str(session.get("csrf", "")),
+            str(request.form.get("_csrf", "x"))
+        ):
+            abort(
+                400,
+                "Invalid security token. Refresh and try again."
+            )
+
+    if (
+        g.user
+        and g.user["must_change"]
+        and request.endpoint not in (
+            "change_password",
+            "logout",
+            "static"
+        )
+    ):
+        return redirect(
+            url_for("change_password")
+        )
+
+
+@app.context_processor
+def common():
+    if "csrf" not in session:
+        session["csrf"] = secrets.token_urlsafe(32)
+
+    return {
+        "csrf": session["csrf"],
+        "current_user": g.get("user")
+    }
+
+
+def login_required(role=None):
+    def deco(fn):
+        @functools.wraps(fn)
+        def inner(*a, **kw):
+            if not g.user:
+                return redirect(
+                    url_for("login")
+                )
+
+            if role and g.user["role"] != role:
+                abort(403)
+
+            return fn(*a, **kw)
+
+        return inner
+
+    return deco
+
+
+def module_by_id(mid):
+    return next(
+        (m for m in MODULES if m[0] == mid),
+        None
+    )
+
+
+def assigned(uid):
+    return {
+        r["module_id"]
+        for r in db().execute(
+            "SELECT module_id FROM assignments "
+            "WHERE user_id=?",
+            (uid,)
+        )
+    }
+
+
+# ==========================================
+# HOME AND LOGIN
+# ==========================================
 
 @app.route("/")
 def home():
-    return render_template("home.html")
+    if not g.user:
+        return redirect(
+            url_for("login")
+        )
 
-@app.route("/register", methods=["GET", "POST"])
-def register():
-    if request.method == "POST":
-        name = request.form.get("name", "").strip()
-        email = request.form.get("email", "").strip().lower()
-        password = request.form.get("password", "")
+    if g.user["role"] == "admin":
+        return redirect(
+            url_for("admin_dashboard")
+        )
 
-        if not name:
-            flash("Name is required.", "danger")
-            return redirect(url_for("register"))
-        if not email:
-            flash("Email is required.", "danger")
-            return redirect(url_for("register"))
-        if len(password) < 8:
-            flash("Password must be at least 8 characters.", "danger")
-            return redirect(url_for("register"))
-
-        if User.query.filter_by(email=email).first():
-            flash("Email already registered.", "danger")
-            return redirect(url_for("register"))
-
-        db.session.add(User(
-            name=name,
-            email=email,
-            password_hash=generate_password_hash(password),
-            role="employee"
-        ))
-        db.session.commit()
-
-        flash("Registration successful. Please log in.", "success")
-        return redirect(url_for("login"))
-
-    return render_template("register.html")
-
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    if request.method == "POST":
-        email = request.form.get("email", "").strip().lower()
-        password = request.form.get("password", "")
-
-        user = User.query.filter_by(email=email).first()
-
-        if user and check_password_hash(user.password_hash, password):
-            session["user_id"] = user.id
-            session["name"] = user.name
-            session["role"] = user.role
-
-            if user.role == "admin":
-                return redirect(url_for("admin_dashboard"))
-            return redirect(url_for("dashboard"))
-
-        flash("Invalid email or password.", "danger")
-
-    return render_template("login.html")
-
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect(url_for("home"))
-
-@app.route("/dashboard")
-@login_required
-def dashboard():
-    user_id = session["user_id"]
-    score, quiz_average, phishing_score, completion = awareness_score(user_id)
-
-    attempts = QuizAttempt.query.filter_by(user_id=user_id).order_by(
-        QuizAttempt.created_at.asc()
-    ).all()
-
-    labels = [f"Attempt {i}" for i in range(1, len(attempts) + 1)]
-    values = [a.score for a in attempts]
-
-    return render_template(
-        "dashboard.html",
-        score=score,
-        quiz_avg=quiz_average,
-        phishing_score=phishing_score,
-        completion=completion,
-        risk=risk_level(score),
-        labels=labels,
-        values=values,
-        recommendations=recommendations_for_user(user_id),
+    return redirect(
+        url_for("my_training")
     )
 
-@app.route("/training")
-@login_required
-def training():
-    modules = TrainingModule.query.order_by(TrainingModule.id.asc()).all()
-    completed = ModuleProgress.query.filter_by(
-        user_id=session["user_id"], completed=True
-    ).all()
-    done = {p.module_id for p in completed}
-    return render_template("training.html", modules=modules, done=done)
-
-@app.route("/training/<int:module_id>")
-@login_required
-def training_module(module_id):
-    module = TrainingModule.query.get_or_404(module_id)
-    progress = ModuleProgress.query.filter_by(
-        user_id=session["user_id"], module_id=module.id, completed=True
-    ).first()
-    return render_template("training_module.html", module=module, completed=bool(progress))
 
 @app.route(
-    "/training/<int:module_id>/complete",
+    "/login",
     methods=["GET", "POST"]
 )
-@login_required
-def complete_module(module_id):
+def login():
+    if request.method == "POST":
+        email = request.form.get(
+            "email", ""
+        ).strip().lower()
 
-    user_id = session["user_id"]
-
-    module = TrainingModule.query.get_or_404(module_id)
-
-    progress = ModuleProgress.query.filter_by(
-        user_id=user_id,
-        module_id=module.id
-    ).first()
-
-    if not progress:
-        progress = ModuleProgress(
-            user_id=user_id,
-            module_id=module.id
+        password = request.form.get(
+            "password", ""
         )
-        db.session.add(progress)
 
-    progress.completed = True
-    progress.completed_at = datetime.utcnow()
+        user = db().execute(
+            "SELECT * FROM users WHERE email=?",
+            (email,)
+        ).fetchone()
 
-    db.session.commit()
+        if user and check_password_hash(
+            user["password_hash"],
+            password
+        ):
+            session.clear()
+
+            session["uid"] = user["id"]
+            session["csrf"] = secrets.token_urlsafe(32)
+
+            return redirect(
+                url_for("home")
+            )
+
+        flash(
+            "Invalid email or password.",
+            "error"
+        )
+
+    has_admin = bool(
+        db().execute(
+            "SELECT 1 FROM users WHERE role='admin'"
+        ).fetchone()
+    )
+
+    return render_template(
+        "login.html",
+        has_admin=has_admin
+    )
+
+
+@app.post("/logout")
+def logout():
+    session.clear()
+
+    return redirect(
+        url_for("login")
+    )
+
+
+# ==========================================
+# CHANGE PASSWORD
+# ==========================================
+
+@app.route(
+    "/change-password",
+    methods=["GET", "POST"]
+)
+@login_required()
+def change_password():
+    if request.method == "POST":
+        old = request.form.get(
+            "old_password", ""
+        )
+
+        new = request.form.get(
+            "new_password", ""
+        )
+
+        if not check_password_hash(
+            g.user["password_hash"],
+            old
+        ):
+            flash(
+                "Current password is incorrect.",
+                "error"
+            )
+
+        elif len(new) < 12:
+            flash(
+                "Use at least 12 characters.",
+                "error"
+            )
+
+        else:
+            db().execute(
+                "UPDATE users SET "
+                "password_hash=?, must_change=0 "
+                "WHERE id=?",
+                (
+                    generate_password_hash(new),
+                    g.user["id"]
+                )
+            )
+
+            db().commit()
+
+            flash(
+                "Password changed successfully.",
+                "success"
+            )
+
+            return redirect(
+                url_for("home")
+            )
+
+    return render_template(
+        "password.html"
+    )
+
+
+# ==========================================
+# ADMIN DASHBOARD
+# ==========================================
+
+@app.route("/admin")
+@login_required("admin")
+def admin_dashboard():
+    employees = db().execute(
+        "SELECT id,name,email FROM users "
+        "WHERE role='employee' ORDER BY name"
+    ).fetchall()
+
+    data = []
+
+    for e in employees:
+        aids = assigned(e["id"])
+
+        finished = {
+            r["module_id"]
+            for r in db().execute(
+                "SELECT module_id FROM progress "
+                "WHERE user_id=?",
+                (e["id"],)
+            )
+        }
+
+        data.append({
+            "user": e,
+            "assigned": len(aids),
+            "completed": len(aids & finished)
+        })
+
+    return render_template(
+        "admin.html",
+        employees=data,
+        modules=MODULES
+    )
+
+
+# ==========================================
+# ADD NEW EMPLOYEE
+# ==========================================
+
+@app.route(
+    "/admin/employees/new",
+    methods=["GET", "POST"]
+)
+@login_required("admin")
+def add_employee():
+    if request.method == "POST":
+        name = request.form.get(
+            "name", ""
+        ).strip()
+
+        email = request.form.get(
+            "email", ""
+        ).strip().lower()
+
+        selected = request.form.getlist(
+            "modules"
+        )
+
+        valid_ids = {
+            str(m[0]) for m in MODULES
+        }
+
+        if (
+            not name
+            or len(name) > 100
+            or "@" not in email
+            or len(email) > 200
+        ):
+            flash(
+                "Enter a valid name and email.",
+                "error"
+            )
+
+        elif (
+            not selected
+            or not all(
+                x in valid_ids for x in selected
+            )
+        ):
+            flash(
+                "Choose at least one valid training module.",
+                "error"
+            )
+
+        else:
+            password = secrets.token_urlsafe(15)
+
+            try:
+                cur = db().execute(
+                    "INSERT INTO users("
+                    "name,email,password_hash,role,must_change"
+                    ") VALUES(?,?,?,?,1)",
+                    (
+                        name,
+                        email,
+                        generate_password_hash(password),
+                        "employee"
+                    )
+                )
+
+                db().executemany(
+                    "INSERT INTO assignments("
+                    "user_id,module_id"
+                    ") VALUES(?,?)",
+                    [
+                        (cur.lastrowid, int(x))
+                        for x in set(selected)
+                    ]
+                )
+
+                db().commit()
+
+                return render_template(
+                    "credentials.html",
+                    email=email,
+                    password=password,
+                    name=name
+                )
+
+            except sqlite3.IntegrityError:
+                db().rollback()
+
+                flash(
+                    "An account with this email already exists.",
+                    "error"
+                )
+
+    return render_template(
+        "employee_form.html",
+        modules=MODULES,
+        employee=None,
+        chosen=set()
+    )
+
+
+# ==========================================
+# EDIT EMPLOYEE AND ASSIGNED MODULES
+# ==========================================
+
+@app.route(
+    "/admin/employees/<int:uid>/edit",
+    methods=["GET", "POST"]
+)
+@login_required("admin")
+def edit_employee(uid):
+    employee = db().execute(
+        "SELECT * FROM users "
+        "WHERE id=? AND role='employee'",
+        (uid,)
+    ).fetchone()
+
+    if not employee:
+        abort(404)
+
+    if request.method == "POST":
+        name = request.form.get(
+            "name", ""
+        ).strip()
+
+        email = request.form.get(
+            "email", ""
+        ).strip().lower()
+
+        selected = request.form.getlist(
+            "modules"
+        )
+
+        valid_ids = {
+            str(m[0]) for m in MODULES
+        }
+
+        if (
+            not name
+            or "@" not in email
+            or len(name) > 100
+            or len(email) > 200
+            or not selected
+            or not all(
+                x in valid_ids for x in selected
+            )
+        ):
+            flash(
+                "Provide a valid name, email and at least one module.",
+                "error"
+            )
+
+        else:
+            try:
+                db().execute(
+                    "UPDATE users "
+                    "SET name=?, email=? WHERE id=?",
+                    (name, email, uid)
+                )
+
+                db().execute(
+                    "DELETE FROM assignments "
+                    "WHERE user_id=?",
+                    (uid,)
+                )
+
+                db().executemany(
+                    "INSERT INTO assignments("
+                    "user_id,module_id"
+                    ") VALUES(?,?)",
+                    [
+                        (uid, int(x))
+                        for x in set(selected)
+                    ]
+                )
+
+                db().commit()
+
+                flash(
+                    "Employee details and module assignments saved.",
+                    "success"
+                )
+
+                return redirect(
+                    url_for("admin_dashboard")
+                )
+
+            except sqlite3.IntegrityError:
+                db().rollback()
+
+                flash(
+                    "This email is already in use.",
+                    "error"
+                )
+
+    return render_template(
+        "employee_form.html",
+        modules=MODULES,
+        employee=employee,
+        chosen=assigned(uid)
+    )
+
+
+# ==========================================
+# RESET EMPLOYEE PASSWORD
+# ==========================================
+
+@app.post(
+    "/admin/employees/<int:uid>/reset"
+)
+@login_required("admin")
+def reset_employee(uid):
+    employee = db().execute(
+        "SELECT * FROM users "
+        "WHERE id=? AND role='employee'",
+        (uid,)
+    ).fetchone()
+
+    if not employee:
+        abort(404)
+
+    password = secrets.token_urlsafe(15)
+
+    db().execute(
+        "UPDATE users SET "
+        "password_hash=?, must_change=1 "
+        "WHERE id=?",
+        (
+            generate_password_hash(password),
+            uid
+        )
+    )
+
+    db().commit()
+
+    return render_template(
+        "credentials.html",
+        name=employee["name"],
+        email=employee["email"],
+        password=password
+    )
+
+
+# ==========================================
+# DELETE EMPLOYEE
+# ==========================================
+
+@app.post(
+    "/admin/employees/<int:uid>/delete"
+)
+@login_required("admin")
+def delete_employee(uid):
+    db().execute(
+        "DELETE FROM users "
+        "WHERE id=? AND role='employee'",
+        (uid,)
+    )
+
+    db().commit()
 
     flash(
-        "Module marked as completed.",
+        "Employee removed.",
         "success"
     )
 
     return redirect(
-        url_for("training")
+        url_for("admin_dashboard")
     )
 
-@app.route("/quiz", methods=["GET", "POST"])
-@login_required
-def quiz():
-    questions = Question.query.order_by(Question.id.asc()).all()
 
-    if request.method == "POST":
-        if not questions:
-            flash("No quiz questions are available.", "warning")
-            return redirect(url_for("dashboard"))
+# ==========================================
+# EMPLOYEE TRAINING DASHBOARD
+# ==========================================
 
-        total_correct = 0
-        topic_results = {}
-        submitted_answers = {}
+@app.route("/training")
+@login_required("employee")
+def my_training():
+    ids = assigned(
+        g.user["id"]
+    )
 
-        for question in questions:
-            selected_answer = request.form.get(f"q{question.id}")
-
-            if not selected_answer:
-                flash("Please answer every quiz question.", "warning")
-                return redirect(url_for("quiz"))
-
-            submitted_answers[question.id] = selected_answer
-            topic_results.setdefault(question.topic, {"correct": 0, "total": 0})
-            topic_results[question.topic]["total"] += 1
-
-            if selected_answer == question.correct_answer:
-                total_correct += 1
-                topic_results[question.topic]["correct"] += 1
-
-        score = round((total_correct / len(questions)) * 100, 1)
-
-        attempt = QuizAttempt(user_id=session["user_id"], score=score)
-        db.session.add(attempt)
-        db.session.flush()
-
-        for question in questions:
-            selected_answer = submitted_answers[question.id]
-            db.session.add(QuizAnswer(
-                attempt_id=attempt.id,
-                question_id=question.id,
-                selected_answer=selected_answer,
-                correct=(selected_answer == question.correct_answer),
-            ))
-
-        for topic, result in topic_results.items():
-            topic_score = round((result["correct"] / result["total"]) * 100, 1)
-            db.session.add(TopicScore(
-                attempt_id=attempt.id,
-                topic=topic,
-                score=topic_score,
-            ))
-
-        db.session.commit()
-        flash(f"Quiz completed. Your score is {score}%.", "success")
-        return redirect(url_for("dashboard"))
-
-    return render_template("quiz.html", questions=questions)
-
-@app.route("/phishing")
-@login_required
-def phishing():
-    scenarios = PhishingScenario.query.order_by(PhishingScenario.id.asc()).all()
-    return render_template("phishing.html", scenarios=scenarios)
-
-@app.route("/phishing/<int:scenario_id>", methods=["GET", "POST"])
-@login_required
-def phishing_scenario(scenario_id):
-    scenario = PhishingScenario.query.get_or_404(scenario_id)
-    result = None
-
-    if request.method == "POST":
-        choice = request.form.get("choice")
-
-        if choice not in ["malicious", "legitimate"]:
-            flash("Please select an answer.", "warning")
-            return redirect(url_for("phishing_scenario", scenario_id=scenario.id))
-
-        selected_malicious = choice == "malicious"
-        correct = selected_malicious == scenario.malicious
-
-        db.session.add(PhishingAttempt(
-            user_id=session["user_id"],
-            scenario_id=scenario.id,
-            correct=correct,
-        ))
-        db.session.commit()
-
-        result = {
-            "correct": correct,
-            "explanation": scenario.explanation,
-        }
-
-    return render_template("phishing_scenario.html", scenario=scenario, result=result)
-
-@app.route("/admin")
-@admin_required
-def admin_dashboard():
-    users = User.query.filter_by(role="employee").all()
-    rows = []
-
-    for user in users:
-        score, quiz_average, phishing_score, completion = awareness_score(user.id)
-        rows.append({
-            "name": user.name,
-            "email": user.email,
-            "score": score,
-            "quiz_avg": quiz_average,
-            "quiz_attempts": QuizAttempt.query.filter_by(user_id=user.id).count(),
-            "phishing_score": phishing_score,
-            "completion": completion,
-            "risk": risk_level(score),
-        })
-
-    avg_score = round(sum(r["score"] for r in rows) / len(rows), 1) if rows else 0
-    avg_quiz_score = round(sum(r["quiz_avg"] for r in rows) / len(rows), 1) if rows else 0
-    overall_training_completion = round(
-        sum(r["completion"] for r in rows) / len(rows), 1
-    ) if rows else 0
-
-    all_quiz_attempts = QuizAttempt.query.order_by(QuizAttempt.created_at.asc()).all()
-    quiz_attempt_count = len(all_quiz_attempts)
-
-    risk_counts = {"Low": 0, "Moderate": 0, "High": 0, "Critical": 0}
-    for row in rows:
-        risk_counts[row["risk"]] += 1
-
-    quiz_chart_labels = [f"Attempt {i}" for i in range(1, len(all_quiz_attempts) + 1)]
-    quiz_chart_values = [a.score for a in all_quiz_attempts]
-
-    incorrect_questions = []
-    for question in Question.query.all():
-        total_answers = QuizAnswer.query.filter_by(question_id=question.id).count()
-        wrong_count = QuizAnswer.query.filter_by(
-            question_id=question.id, correct=False
-        ).count()
-        incorrect_percentage = round(
-            (wrong_count / total_answers) * 100, 1
-        ) if total_answers else 0
-
-        incorrect_questions.append({
-            "question": question.question,
-            "topic": question.topic,
-            "wrong_count": wrong_count,
-            "incorrect_percentage": incorrect_percentage,
-        })
-
-    incorrect_questions.sort(key=lambda item: item["wrong_count"], reverse=True)
+    done = {
+        r["module_id"]
+        for r in db().execute(
+            "SELECT module_id FROM progress "
+            "WHERE user_id=?",
+            (g.user["id"],)
+        )
+    }
 
     return render_template(
-        "admin.html",
-        rows=rows,
-        avg_score=avg_score,
-        avg_quiz_score=avg_quiz_score,
-        quiz_attempt_count=quiz_attempt_count,
-        overall_training_completion=overall_training_completion,
-        risk_counts=risk_counts,
-        quiz_chart_labels=quiz_chart_labels,
-        quiz_chart_values=quiz_chart_values,
-        incorrect_questions=incorrect_questions,
+        "training.html",
+        modules=[
+            m for m in MODULES
+            if m[0] in ids
+        ],
+        done=done
     )
 
-@app.route("/api/stats")
-@admin_required
-def stats_api():
-    users = User.query.filter_by(role="employee").all()
-    data = []
 
-    for user in users:
-        score, quiz_average, phishing_score, completion = awareness_score(user.id)
-        data.append({
-            "name": user.name,
-            "score": score,
-            "quiz_average": quiz_average,
-            "phishing_score": phishing_score,
-            "completion": completion,
-            "risk": risk_level(score),
-            "quiz_attempts": QuizAttempt.query.filter_by(user_id=user.id).count(),
-        })
+# ==========================================
+# INDIVIDUAL TRAINING MODULE
+# ==========================================
 
-    return jsonify(data)
+@app.route("/training/<int:mid>")
+@login_required("employee")
+def module_detail(mid):
+    mod = module_by_id(mid)
 
-# -------------------------
-# SEED DATA
-# -------------------------
+    if not mod:
+        abort(404)
 
-def seed_data():
-    if TrainingModule.query.count() == 0:
-        modules = [
-            ("Phishing", "Recognising Phishing",
-             "Check sender addresses, suspicious links, urgent language, spelling mistakes and unexpected attachments."),
-            ("Password Security", "Strong Password Practices",
-             "Use long unique passwords, avoid password reuse and use a password manager where possible."),
-            ("Social Engineering", "Social Engineering Awareness",
-             "Verify unusual requests for money, credentials or sensitive information through a trusted channel."),
-            ("Malware", "Malware Basics",
-             "Avoid unknown downloads, keep software updated and report suspicious system behaviour."),
-            ("Safe Browsing", "Safe Browsing Habits",
-             "Use HTTPS where appropriate, avoid suspicious sites and pay attention to browser warnings."),
-            ("Multi-Factor Authentication", "Using MFA",
-             "Multi-factor authentication adds another verification step and reduces the impact of stolen passwords."),
+    if mid not in assigned(
+        g.user["id"]
+    ):
+        abort(403)
+
+    done = bool(
+        db().execute(
+            "SELECT 1 FROM progress "
+            "WHERE user_id=? AND module_id=?",
+            (g.user["id"], mid)
+        ).fetchone()
+    )
+
+    return render_template(
+        "lesson.html",
+        module=mod,
+        points=mod[4].split("|"),
+        done=done
+    )
+
+
+@app.post(
+    "/training/<int:mid>/complete"
+)
+@login_required("employee")
+def finish_module(mid):
+    if mid not in assigned(
+        g.user["id"]
+    ):
+        abort(403)
+
+    db().execute(
+        "INSERT OR IGNORE INTO progress("
+        "user_id,module_id,completed_at"
+        ") VALUES(?,?,?)",
+        (
+            g.user["id"],
+            mid,
+            datetime.now(
+                timezone.utc
+            ).isoformat()
+        )
+    )
+
+    db().commit()
+
+    flash(
+        "Training marked complete.",
+        "success"
+    )
+
+    return redirect(
+        url_for("my_training")
+    )
+
+
+# ==========================================
+# CYBERSECURITY QUIZ QUESTIONS
+# ==========================================
+
+QUIZZES = {
+    1: [
+        (
+            "What is a common sign of phishing?",
+            [
+                "Unexpected urgent request",
+                "Expected team meeting",
+                "Known contact in person",
+                "Scheduled software update"
+            ],
+            0
+        ),
+        (
+            "What should you do with a suspicious link?",
+            [
+                "Click to test",
+                "Report without clicking",
+                "Share with coworkers",
+                "Enter your password"
+            ],
+            1
+        ),
+        (
+            "A sender address looks unusual. What is best?",
+            [
+                "Verify independently",
+                "Trust the display name",
+                "Reply with password",
+                "Ignore warnings"
+            ],
+            0
+        )
+    ],
+    2: [
+        (
+            "Which password approach is best?",
+            [
+                "Reuse one password",
+                "Use a long unique passphrase",
+                "Use your birthday",
+                "Share with coworkers"
+            ],
+            1
+        ),
+        (
+            "Where should work passwords be stored?",
+            [
+                "In an approved password manager",
+                "On a desk note",
+                "In a public document",
+                "In a group chat"
+            ],
+            0
+        ),
+        (
+            "If a password might be stolen, what should you do?",
+            [
+                "Wait for an alert",
+                "Tell no one",
+                "Change it and report promptly",
+                "Reuse it elsewhere"
+            ],
+            2
+        )
+    ],
+    3: [
+        (
+            "Your manager requests an unusual urgent payment. What next?",
+            [
+                "Pay immediately",
+                "Verify through a trusted channel",
+                "Share login details",
+                "Ignore all messages"
+            ],
+            1
+        ),
+        (
+            "Social engineering usually targets what?",
+            [
+                "Only software",
+                "People and their trust",
+                "Only routers",
+                "Only printers"
+            ],
+            1
+        ),
+        (
+            "A caller asks for a one-time code. What should you do?",
+            [
+                "Read it aloud",
+                "Send it by email",
+                "Refuse and report",
+                "Post it publicly"
+            ],
+            2
+        )
+    ],
+    4: [
+        (
+            "You receive an unknown attachment. What is safest?",
+            [
+                "Open it immediately",
+                "Enable macros",
+                "Verify sender and file first",
+                "Forward to everyone"
+            ],
+            2
+        ),
+        (
+            "Why update work software?",
+            [
+                "For new wallpapers",
+                "To reduce known security weaknesses",
+                "To remove passwords",
+                "To disable protection"
+            ],
+            1
+        ),
+        (
+            "A device displays a ransomware message. What now?",
+            [
+                "Report to IT promptly",
+                "Pay without telling anyone",
+                "Download random repair tools",
+                "Ignore it"
+            ],
+            0
+        )
+    ],
+    5: [
+        (
+            "Does HTTPS guarantee a site is trustworthy?",
+            [
+                "Yes, always",
+                "No, it only protects the connection",
+                "Yes, for all payments",
+                "Yes, against phishing"
+            ],
+            1
+        ),
+        (
+            "Before logging in to a website, you should:",
+            [
+                "Check the full address",
+                "Trust every search ad",
+                "Disable warnings",
+                "Ignore typos"
+            ],
+            0
+        ),
+        (
+            "An unexpected browser warning appears. You should:",
+            [
+                "Ignore it",
+                "Share credentials",
+                "Stop and investigate",
+                "Install suggested unknown app"
+            ],
+            2
+        )
+    ],
+    6: [
+        (
+            "What does MFA provide?",
+            [
+                "A second verification layer",
+                "A shorter password",
+                "Public passwords",
+                "No login checks"
+            ],
+            0
+        ),
+        (
+            "An MFA request arrives that you did not start. You should:",
+            [
+                "Approve to stop it",
+                "Reject and report",
+                "Share the code",
+                "Ignore repeated requests"
+            ],
+            1
+        ),
+        (
+            "Should you share your one-time code with IT by phone?",
+            [
+                "Yes whenever asked",
+                "Only in group chat",
+                "No, never share it",
+                "Post it in a ticket"
+            ],
+            2
+        )
+    ]
+}
+
+
+# ==========================================
+# EMPLOYEE QUIZ DASHBOARD
+# ==========================================
+
+@app.route("/quiz")
+@login_required("employee")
+def quiz_index():
+    ids = assigned(
+        g.user["id"]
+    )
+
+    scores = {
+        r["module_id"]: r["score"]
+        for r in db().execute(
+            "SELECT module_id,"
+            "round(100.0*correct/total) AS score "
+            "FROM quiz_attempts "
+            "WHERE user_id=? ORDER BY id",
+            (g.user["id"],)
+        )
+    }
+
+    return render_template(
+        "quizzes.html",
+        modules=[
+            m for m in MODULES
+            if m[0] in ids
+        ],
+        scores=scores
+    )
+
+
+# ==========================================
+# TAKE QUIZ AND STORE RESULTS
+# ==========================================
+
+@app.route(
+    "/quiz/<int:mid>",
+    methods=["GET", "POST"]
+)
+@login_required("employee")
+def quiz_module(mid):
+    if not module_by_id(mid):
+        abort(404)
+
+    if mid not in assigned(
+        g.user["id"]
+    ):
+        abort(403)
+
+    questions = QUIZZES[mid]
+
+    if request.method == "POST":
+        answers = [
+            request.form.get(f"q{i}")
+            for i in range(len(questions))
         ]
-        for topic, title, content in modules:
-            db.session.add(TrainingModule(topic=topic, title=title, content=content))
 
-    if Question.query.count() == 0:
-        questions = [
-            ("Phishing", "Which is a common phishing warning sign?",
-             "Unexpected urgent request", "Normal company signature", "Known sender", "Expected invoice", "A"),
-            ("Password Security", "Which password is safest?",
-             "password123", "Company2026", "A long unique passphrase", "12345678", "C"),
-            ("Social Engineering", "What should you do with an unusual payment request?",
-             "Pay immediately", "Verify through a trusted channel", "Forward it to everyone", "Ignore company policy", "B"),
-            ("Malware", "What is the safest action for an unknown attachment?",
-             "Open it immediately", "Disable antivirus", "Verify before opening", "Upload it publicly", "C"),
-            ("Safe Browsing", "What does HTTPS mainly indicate?",
-             "Encrypted browser-server connection", "Website is always trustworthy", "No malware can exist", "Website is government-owned", "A"),
-            ("Multi-Factor Authentication", "Why use MFA?",
-             "It removes passwords", "It adds another verification layer", "It makes usernames secret", "It blocks every phishing attack", "B"),
-        ]
-        for item in questions:
-            db.session.add(Question(
-                topic=item[0],
-                question=item[1],
-                option_a=item[2],
-                option_b=item[3],
-                option_c=item[4],
-                option_d=item[5],
-                correct_answer=item[6],
-            ))
+        if any(
+            a not in ["0", "1", "2", "3"]
+            for a in answers
+        ):
+            flash(
+                "Please answer every question.",
+                "error"
+            )
 
-    if PhishingScenario.query.count() == 0:
-        db.session.add(PhishingScenario(
-            sender="security-update@micr0soft-support.example",
-            subject="URGENT: Your account will be closed today",
-            body="Click the link immediately and verify your password to keep your account active.",
-            malicious=True,
-            explanation="This message uses urgency, a suspicious sender domain and requests credentials.",
-        ))
-        db.session.add(PhishingScenario(
-            sender="hr@smallbizconnect.local",
-            subject="Updated staff meeting agenda",
-            body="The updated agenda is available in the internal staff portal. No login link is included in this email.",
-            malicious=False,
-            explanation="This message does not pressure the user, request credentials or use a suspicious link.",
-        ))
+        else:
+            correct = sum(
+                int(a) == q[2]
+                for a, q in zip(
+                    answers,
+                    questions
+                )
+            )
 
-    admin_email = "admin@cyberaware.local"
-    existing_admin = User.query.filter_by(email=admin_email).first()
+            db().execute(
+                "INSERT INTO quiz_attempts("
+                "user_id,module_id,correct,total,taken_at"
+                ") VALUES(?,?,?,?,?)",
+                (
+                    g.user["id"],
+                    mid,
+                    correct,
+                    len(questions),
+                    datetime.now(
+                        timezone.utc
+                    ).isoformat()
+                )
+            )
 
-    if existing_admin:
-        existing_admin.name = "CyberAware Admin"
-        existing_admin.role = "admin"
-        existing_admin.password_hash = generate_password_hash("Admin123!")
-    else:
-        db.session.add(User(
-            name="CyberAware Admin",
-            email=admin_email,
-            password_hash=generate_password_hash("Admin123!"),
-            role="admin",
-        ))
+            db().commit()
 
-    db.session.commit()
+            return render_template(
+                "quiz_result.html",
+                module=module_by_id(mid),
+                correct=correct,
+                total=len(questions),
+                questions=questions,
+                answers=answers
+            )
 
-with app.app_context():
-    db.create_all()
-    seed_data()
-    print("Training modules:", TrainingModule.query.count())
-    print("Quiz questions:", Question.query.count())
-    print("Phishing scenarios:", PhishingScenario.query.count())
-    print("Users:", User.query.count())
+    return render_template(
+        "quiz.html",
+        module=module_by_id(mid),
+        questions=questions
+    )
+
+
+# ==========================================
+# HEALTH CHECK
+# ==========================================
+
+@app.get("/health")
+def health():
+    return {
+        "status": "ok"
+    }
+
+
+# ==========================================
+# START CYBERAWARE WEBSITE
+# ==========================================
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(
+        host="0.0.0.0",
+        port=int(
+            os.environ.get("PORT", 5000)
+        ),
+        debug=(
+            os.environ.get("FLASK_DEBUG") == "1"
+        )
+    )
