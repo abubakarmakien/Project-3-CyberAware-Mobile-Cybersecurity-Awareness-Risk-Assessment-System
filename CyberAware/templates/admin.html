@@ -1,196 +1,165 @@
-<!-- Hidden Flask/Jinja data -->
-<div
-    id="dashboardData"
-    data-risk-low="{{ risk_counts.get('Low', 0) }}"
-    data-risk-moderate="{{ risk_counts.get('Moderate', 0) }}"
-    data-risk-high="{{ risk_counts.get('High', 0) }}"
-    data-risk-critical="{{ risk_counts.get('Critical', 0) }}"
-    data-quiz-labels='{{ quiz_chart_labels | tojson }}'
-    data-quiz-values='{{ quiz_chart_values | tojson }}'
-    style="display: none;">
+
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div class="heading">
+    <div>
+        <div class="eyebrow">ADMIN WORKSPACE</div>
+        <h1>Employee Training Management</h1>
+        <p>Create employees, assign training modules
+           and monitor progress.</p>
+    </div>
+
+    <a class="btn" href="{{ url_for('add_employee') }}">
+        + Add Employee
+    </a>
 </div>
 
-
-{% block scripts %}
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-<script>
-
-document.addEventListener("DOMContentLoaded", function () {
-
-    // Get data container
-    const dataElement =
-        document.getElementById("dashboardData");
-
-
-    // -----------------------------------------
-    // Risk Data
-    // -----------------------------------------
-
-    const riskLow =
-        Number(dataElement.dataset.riskLow || 0);
-
-    const riskModerate =
-        Number(dataElement.dataset.riskModerate || 0);
-
-    const riskHigh =
-        Number(dataElement.dataset.riskHigh || 0);
-
-    const riskCritical =
-        Number(dataElement.dataset.riskCritical || 0);
-
-
-    // -----------------------------------------
-    // Quiz Data
-    // -----------------------------------------
-
-    let quizLabels = [];
-
-    let quizValues = [];
-
-
-    try {
-
-        quizLabels =
-            JSON.parse(
-                dataElement.dataset.quizLabels || "[]"
-            );
-
-        quizValues =
-            JSON.parse(
-                dataElement.dataset.quizValues || "[]"
-            );
-
-    } catch (error) {
-
-        console.error(
-            "Unable to load quiz chart data:",
-            error
-        );
-
-    }
-
-
-    // -----------------------------------------
-    // Risk Distribution Chart
-    // -----------------------------------------
-
-    const riskCanvas =
-        document.getElementById("riskChart");
-
-
-    if (riskCanvas) {
-
-        new Chart(riskCanvas, {
-
-            type: "doughnut",
-
-            data: {
-
-                labels: [
-                    "Low",
-                    "Moderate",
-                    "High",
-                    "Critical"
-                ],
-
-                datasets: [{
-
-                    label: "Employees",
-
-                    data: [
-                        riskLow,
-                        riskModerate,
-                        riskHigh,
-                        riskCritical
-                    ]
-
-                }]
-
-            },
-
-            options: {
-
-                responsive: true,
-
-                maintainAspectRatio: false,
-
-                plugins: {
-
-                    legend: {
-
-                        position: "bottom"
-
-                    }
-
-                }
-
-            }
-
-        });
-
-    }
-
-
-    // -----------------------------------------
-    // Quiz Performance Chart
-    // -----------------------------------------
-
-    const quizCanvas =
-        document.getElementById("quizChart");
-
-
-    if (quizCanvas) {
-
-        new Chart(quizCanvas, {
-
-            type: "line",
-
-            data: {
-
-                labels: quizLabels,
-
-                datasets: [{
-
-                    label: "Quiz Score (%)",
-
-                    data: quizValues,
-
-                    tension: 0.3,
-
-                    fill: false
-
-                }]
-
-            },
-
-            options: {
-
-                responsive: true,
-
-                maintainAspectRatio: false,
-
-                scales: {
-
-                    y: {
-
-                        beginAtZero: true,
-
-                        max: 100
-
-                    }
-
-                }
-
-            }
-
-        });
-
-    }
-
-});
-
-</script>
+<!-- Dashboard Summary -->
+<div class="stats">
+    <div class="card metric">
+        <b>{{ employees|length }}</b>
+        <span>Total Employees</span>
+    </div>
+
+    <div class="card metric">
+        <b>{{ modules|length }}</b>
+        <span>Training Modules</span>
+    </div>
+
+    <div class="card metric">
+        <b>{{ employees|sum(attribute='assigned') }}</b>
+        <span>Assigned Lessons</span>
+    </div>
+
+    <div class="card metric">
+        <b>{{ employees|sum(attribute='completed') }}</b>
+        <span>Completed Lessons</span>
+    </div>
+</div>
+
+<!-- Employee Management -->
+<div class="card">
+    <div class="sectionhead">
+        <h2>Employee Management</h2>
+        <span class="muted">
+            Manage accounts and training
+        </span>
+    </div>
+
+    <div class="tablewrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Employee</th>
+                    <th>Assigned</th>
+                    <th>Completed</th>
+                    <th>Account Actions</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for row in employees %}
+                <tr>
+                    <td>
+                        <strong>
+                            {{ row.user['name'] }}
+                        </strong>
+                        <div class="muted">
+                            {{ row.user['email'] }}
+                        </div>
+                    </td>
+
+                    <td>
+                        {{ row.assigned }} /
+                        {{ modules|length }}
+                    </td>
+
+                    <td>
+                        {{ row.completed }} /
+                        {{ row.assigned }}
+                    </td>
+
+                    <td>
+                        <div class="actions">
+
+                            <!-- Edit / Assign -->
+                            <a class="btn small light"
+                               href="{{ url_for('edit_employee',
+                               uid=row.user['id']) }}">
+                                Edit / Assign Modules
+                            </a>
+
+                            <!-- Reset Password -->
+                            <form method="post"
+                                  action="{{ url_for('reset_employee',
+                                  uid=row.user['id']) }}">
+                                <input type="hidden"
+                                       name="_csrf"
+                                       value="{{ csrf }}">
+
+                                <button type="submit"
+                                        class="btn small light"
+                                        onclick="return confirm('Reset this employee password?')">
+                                    Reset Password
+                                </button>
+                            </form>
+
+                            <!-- Delete Employee -->
+                            <form method="post"
+                                  action="{{ url_for('delete_employee',
+                                  uid=row.user['id']) }}"
+                                  onsubmit="return confirm('Delete employee and training progress?')">
+
+                                <input type="hidden"
+                                       name="_csrf"
+                                       value="{{ csrf }}">
+
+                                <button type="submit"
+                                        class="btn small danger">
+                                    Delete
+                                </button>
+                            </form>
+
+                        </div>
+                    </td>
+                </tr>
+
+                {% else %}
+
+                <tr>
+                    <td colspan="4">
+                        No employees found.
+                        Click Add Employee to create an account.
+                    </td>
+                </tr>
+
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Training Modules -->
+<h2 class="spaced">Available Training Modules</h2>
+
+<div class="modules">
+    {% for module in modules %}
+
+    <div class="card module">
+        <span class="iconbubble"
+              style="background: {{ module[8] }}20;
+                     color: {{ module[8] }};">
+
+            {{ '%02d'|format(module[0]) }}
+        </span>
+
+        <h3>{{ module[1] }}</h3>
+        <p>{{ module[2] }}</p>
+    </div>
+
+    {% endfor %}
+</div>
 
 {% endblock %}
